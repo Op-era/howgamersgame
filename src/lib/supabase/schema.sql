@@ -45,15 +45,34 @@ CREATE TABLE IF NOT EXISTS games (
   title TEXT NOT NULL,
   description TEXT,
   long_description TEXT,
-  cover_art_url TEXT,           -- full game art for the cartridge face
-  cartridge_label_url TEXT,     -- small label for the rack view
-  game_url TEXT NOT NULL,       -- iframe src for the game
+  cover_art_url TEXT,           -- 800×600 art used on TV + pulled-out cartridge face
+  cartridge_label_url TEXT,     -- 200×120 thumbnail shown in rack slot
+  game_url TEXT NOT NULL,       -- iframe src: Supabase Storage URL or external URL
+  game_type TEXT NOT NULL DEFAULT 'external'
+    CHECK (game_type IN ('supabase', 'external')),
+  storage_path TEXT,            -- relative path inside the "games" Storage bucket
+                                -- e.g. "my-game/index.html" (only set when game_type='supabase')
   genre TEXT,
   is_active BOOLEAN NOT NULL DEFAULT TRUE,
   sort_order INTEGER NOT NULL DEFAULT 0,
   play_count INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- ── Supabase Storage buckets (run separately in Storage UI or SQL) ─────────────
+-- CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+--
+-- Bucket: "games"       (public) — stores uploaded game files
+-- Bucket: "game-assets" (public) — stores cover art, labels, blank cartridge image
+--
+-- Example Storage paths:
+--   game-assets/covers/{slug}.png       — 800×600 cover art
+--   game-assets/labels/{slug}.png       — 200×120 label
+--   game-assets/cartridges/blank.png    — blank cartridge 3D image (platform-wide)
+--   game-assets/cartridges/tv-off.png   — TV off state
+--   game-assets/cartridges/console.png  — console unit image
+--   games/{slug}/index.html             — entry point for Supabase-hosted game
+--   games/{slug}/**                     — all other game files
 
 ALTER TABLE games ENABLE ROW LEVEL SECURITY;
 
@@ -86,12 +105,11 @@ CREATE TABLE IF NOT EXISTS coin_packages (
 
 -- Seed the coin packages
 INSERT INTO coin_packages (name, price_cents, coins, bonus_coins, sort_order) VALUES
-  ('Starter',  100,    100,     0,   1),
-  ('Player',   500,    550,    50,   2),
-  ('Gamer',   1000,   1200,   200,   3),
-  ('Pro',     2000,   2200,   200,   4),
-  ('Elite',   4000,   5000,  1000,   5),
-  ('Legend', 10000,  14000,  4000,   6)
+  ('Player',   500,    550,    50,   1),
+  ('Gamer',   1000,   1200,   200,   2),
+  ('Pro',     2000,   2500,   500,   3),
+  ('Elite',   4000,   5200,  1200,   4),
+  ('Legend', 10000,  14000,  4000,   5)
 ON CONFLICT DO NOTHING;
 
 -- ── Coin Transactions ─────────────────────────────────────────────────────────

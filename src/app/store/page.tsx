@@ -6,12 +6,11 @@ import Navigation from '@/components/layout/Navigation'
 import type { User } from '@supabase/supabase-js'
 
 const PACKAGES = [
-  { id: 'starter', name: 'Starter',  price: '$1',   priceCents: 100,   coins: 100,   bonus: 0,    description: 'Try it out' },
-  { id: 'player',  name: 'Player',   price: '$5',   priceCents: 500,   coins: 550,   bonus: 50,   description: '10% bonus' },
-  { id: 'gamer',   name: 'Gamer',    price: '$10',  priceCents: 1000,  coins: 1200,  bonus: 200,  description: '20% bonus' },
-  { id: 'pro',     name: 'Pro',      price: '$20',  priceCents: 2000,  coins: 2200,  bonus: 200,  description: 'Save $2' },
-  { id: 'elite',   name: 'Elite',    price: '$40',  priceCents: 4000,  coins: 5000,  bonus: 1000, description: '25% bonus — Best value' },
-  { id: 'legend',  name: 'Legend',   price: '$100', priceCents: 10000, coins: 14000, bonus: 4000, description: '40% bonus — Max savings' },
+  { id: 'player',  name: 'Player',  price: '$5',   priceCents: 500,   coins: 550,   bonus: 50,   description: '+10% bonus' },
+  { id: 'gamer',   name: 'Gamer',   price: '$10',  priceCents: 1000,  coins: 1200,  bonus: 200,  description: '+20% bonus' },
+  { id: 'pro',     name: 'Pro',     price: '$20',  priceCents: 2000,  coins: 2500,  bonus: 500,  description: '+25% bonus' },
+  { id: 'elite',   name: 'Elite',   price: '$40',  priceCents: 4000,  coins: 5200,  bonus: 1200, description: '+30% bonus — Best value' },
+  { id: 'legend',  name: 'Legend',  price: '$100', priceCents: 10000, coins: 14000, bonus: 4000, description: '+40% bonus — Max savings' },
 ]
 
 export default function StorePage() {

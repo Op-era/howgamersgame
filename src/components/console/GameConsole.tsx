@@ -1,11 +1,12 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import type { Game } from '@/types/game'
+import { gamePlayUrl } from '@/types/game'
 import TVScreen from './TVScreen'
 import ConsoleUnit from './ConsoleUnit'
 import CartridgeRack from './CartridgeRack'
-import GameOverlay from './GameOverlay'
 import AdBanner from '@/components/layout/AdBanner'
 
 interface GameConsoleProps {
@@ -13,10 +14,11 @@ interface GameConsoleProps {
 }
 
 export default function GameConsole({ games }: GameConsoleProps) {
+  const router = useRouter()
   const [activeIndex, setActiveIndex] = useState(0)
   const [tvOn, setTvOn] = useState(false)
   const [hasCartridge, setHasCartridge] = useState(false)
-  const [runningGame, setRunningGame] = useState<Game | null>(null)
+  const [insertingGame, setInsertingGame] = useState<Game | null>(null)
   const prevIndexRef = useRef(-1)
 
   const activeGame = games[activeIndex] ?? null
@@ -42,30 +44,23 @@ export default function GameConsole({ games }: GameConsoleProps) {
 
   function handleGameLaunch(game: Game) {
     setHasCartridge(true)
+    setInsertingGame(game)
+    /* Brief pause for insert animation, then navigate to /play/[slug] */
     setTimeout(() => {
-      setRunningGame(game)
-    }, 400)
-  }
-
-  function handleGameClose() {
-    setRunningGame(null)
-    setHasCartridge(false)
+      router.push(gamePlayUrl(game.slug))
+    }, 700)
   }
 
   function handlePower() {
-    if (hasCartridge && runningGame) {
-      handleGameClose()
-    } else if (hasCartridge) {
-      setRunningGame(activeGame)
+    if (hasCartridge && insertingGame) {
+      router.push(gamePlayUrl(insertingGame.slug))
+    } else if (activeGame) {
+      handleGameLaunch(activeGame)
     }
   }
 
   return (
     <>
-      {/* Fullscreen game overlay */}
-      {runningGame && (
-        <GameOverlay game={runningGame} onClose={handleGameClose} />
-      )}
 
       {/* Main layout */}
       <div style={{
@@ -114,7 +109,7 @@ export default function GameConsole({ games }: GameConsoleProps) {
               />
               <ConsoleUnit
                 hasCartridge={hasCartridge}
-                isRunning={!!runningGame}
+                isRunning={!!insertingGame}
                 onPower={handlePower}
               />
             </div>
