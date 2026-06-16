@@ -58,6 +58,9 @@ export default function Navigation() {
       </Link>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <Link href="/about" style={{ color: 'var(--text-muted)', fontSize: 12, textDecoration: 'none', letterSpacing: '0.05em' }}>
+          ABOUT
+        </Link>
         {user ? (
           <>
             <Link href="/store" style={{ textDecoration: 'none' }}>
@@ -77,6 +80,9 @@ export default function Navigation() {
                   {coins.toLocaleString()}
                 </span>
               </span>
+            </Link>
+            <Link href="/developer" style={{ color: 'var(--text-muted)', fontSize: 13, textDecoration: 'none' }}>
+              DEV
             </Link>
             <Link href="/profile" style={{ color: 'var(--accent-green)', fontSize: 13, textDecoration: 'none' }}>
               PROFILE
@@ -98,6 +104,9 @@ export default function Navigation() {
           </>
         ) : (
           <>
+            <Link href="/subscribe" style={{ color: 'var(--accent-green)', fontSize: 13, textDecoration: 'none', letterSpacing: '0.05em' }}>
+              PASSES
+            </Link>
             <Link href="/store" style={{ color: 'var(--accent-gold)', fontSize: 13, textDecoration: 'none' }}>
               GET COINS
             </Link>
