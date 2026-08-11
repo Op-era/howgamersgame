@@ -24,6 +24,8 @@ export async function POST(request: NextRequest) {
       cartridge_label_url: body.cartridge_label_url || null,
       sort_order: body.sort_order ?? 0,
       is_active: body.is_active ?? true,
+      status: body.status ?? 'live',
+      revenue_share_pct: body.revenue_share_pct ?? 30.0,
     })
     .select()
     .single()

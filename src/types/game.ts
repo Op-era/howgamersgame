@@ -1,4 +1,5 @@
 export type GameType = 'supabase' | 'external'
+export type GameStatus = 'draft' | 'testing' | 'live'
 
 export interface Game {
   id: string
@@ -15,11 +16,19 @@ export interface Game {
   is_active: boolean
   sort_order: number
   play_count: number
+  developer_id: string | null
+  status: GameStatus
+  revenue_share_pct: number
 }
 
 /** The canonical play URL for any game — both hosted and external go through this page */
 export function gamePlayUrl(slug: string) {
   return `/play/${slug}`
+}
+
+/** Private preview URL for draft/testing games — only visible to the owning developer or an admin */
+export function gameTestUrl(slug: string) {
+  return `/test/${slug}`
 }
 
 /** Public Supabase Storage URL for a game's entry point */

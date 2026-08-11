@@ -33,6 +33,8 @@ export default function GameForm({ mode, game }: GameFormProps) {
     cartridge_label_url: game?.cartridge_label_url ?? '',
     sort_order: game?.sort_order ?? 0,
     is_active: game?.is_active ?? true,
+    status: game?.status ?? 'live',
+    revenue_share_pct: game?.revenue_share_pct ?? 30,
   })
 
   function set(key: string, value: string | number | boolean) {
@@ -223,13 +225,40 @@ export default function GameForm({ mode, game }: GameFormProps) {
                   onChange={e => set('sort_order', parseInt(e.target.value) || 0)} />
               </div>
               <div style={fieldStyle}>
-                <label style={labelStyle}>STATUS</label>
+                <label style={labelStyle}>VISIBILITY</label>
                 <select style={inputStyle} value={form.is_active ? 'active' : 'hidden'}
                   onChange={e => set('is_active', e.target.value === 'active')}>
-                  <option value="active">Live</option>
+                  <option value="active">Visible</option>
                   <option value="hidden">Hidden</option>
                 </select>
               </div>
+            </div>
+
+            <div style={{ ...fieldStyle, background: 'var(--console-dark)', borderRadius: 8, padding: 16, marginTop: 4 }}>
+              <label style={labelStyle}>SUBMISSION STATUS</label>
+              <select style={inputStyle} value={form.status}
+                onChange={e => set('status', e.target.value)}>
+                <option value="draft">Draft</option>
+                <option value="testing">Testing (private preview)</option>
+                <option value="live">Live (public)</option>
+              </select>
+              <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 6 }}>
+                Only LIVE games appear on the public site, regardless of visibility.
+              </div>
+
+              {game?.developer_id && (
+                <>
+                  <div style={{ marginTop: 16 }}>
+                    <label style={labelStyle}>REVENUE SHARE % (of coins spent)</label>
+                    <input type="number" min={0} max={100} step={0.5} style={inputStyle}
+                      value={form.revenue_share_pct}
+                      onChange={e => set('revenue_share_pct', parseFloat(e.target.value) || 0)} />
+                  </div>
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 10 }}>
+                    Developer-submitted game (ID: {game.developer_id.slice(0, 8)}…)
+                  </div>
+                </>
+              )}
             </div>
           </div>
 

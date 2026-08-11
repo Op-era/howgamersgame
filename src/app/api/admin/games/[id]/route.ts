@@ -27,6 +27,8 @@ export async function PATCH(request: NextRequest, { params }: Params) {
       cartridge_label_url: body.cartridge_label_url || null,
       sort_order: body.sort_order,
       is_active: body.is_active,
+      status: body.status,
+      revenue_share_pct: body.revenue_share_pct,
     })
     .eq('id', id)
     .select()

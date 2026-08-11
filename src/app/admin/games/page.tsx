@@ -1,10 +1,17 @@
 import { requireAdmin } from '@/lib/auth/adminGuard'
 import { createClient } from '@/lib/supabase/server'
-import { gamePlayUrl } from '@/types/game'
+import { gamePlayUrl, gameTestUrl } from '@/types/game'
 import Link from 'next/link'
 import type { Game } from '@/types/game'
+import PromoteButton from './PromoteButton'
 
 export const dynamic = 'force-dynamic'
+
+const STATUS_STYLES: Record<Game['status'], { label: string; bg: string; color: string }> = {
+  draft: { label: 'DRAFT', bg: 'rgba(255,255,255,0.08)', color: '#aaa' },
+  testing: { label: 'TESTING', bg: 'rgba(255,184,0,0.15)', color: 'var(--accent-gold)' },
+  live: { label: 'LIVE', bg: 'rgba(0,255,136,0.15)', color: 'var(--accent-green)' },
+}
 
 export default async function AdminGamesPage() {
   await requireAdmin()
@@ -30,6 +37,16 @@ export default async function AdminGamesPage() {
           <Link href="/" style={{ color: 'var(--text-muted)', fontSize: 12, textDecoration: 'none', padding: '10px 16px' }}>
             ← Back to site
           </Link>
+          <Link href="/admin/payouts" style={{
+            color: 'var(--accent-gold)',
+            fontSize: 12,
+            textDecoration: 'none',
+            padding: '10px 16px',
+            border: '1px solid var(--accent-gold)',
+            borderRadius: 6,
+          }}>
+            PAYOUTS
+          </Link>
           <Link href="/admin/games/new" style={{
             background: 'var(--accent-green)',
             color: '#000',
@@ -54,7 +71,7 @@ export default async function AdminGamesPage() {
       }}>
         <div style={{
           display: 'grid',
-          gridTemplateColumns: '1fr 120px 100px 80px 80px 120px',
+          gridTemplateColumns: '1fr 100px 90px 70px 90px 170px',
           padding: '10px 20px',
           borderBottom: '1px solid #1a1a3e',
           fontSize: 10,
@@ -75,10 +92,12 @@ export default async function AdminGamesPage() {
           </div>
         )}
 
-        {games?.map((game: Game, i: number) => (
+        {games?.map((game: Game, i: number) => {
+          const status = STATUS_STYLES[game.status]
+          return (
           <div key={game.id} style={{
             display: 'grid',
-            gridTemplateColumns: '1fr 120px 100px 80px 80px 120px',
+            gridTemplateColumns: '1fr 100px 90px 70px 90px 170px',
             padding: '14px 20px',
             borderBottom: i < games.length - 1 ? '1px solid #0d0d1a' : 'none',
             alignItems: 'center',
@@ -88,7 +107,7 @@ export default async function AdminGamesPage() {
                 {game.title}
               </div>
               <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
-                /play/{game.slug}
+                /play/{game.slug}{!game.is_active && ' • hidden'}{game.developer_id && ' • dev submission'}
               </div>
             </div>
             <div>
@@ -114,18 +133,20 @@ export default async function AdminGamesPage() {
                 fontSize: 10,
                 padding: '2px 8px',
                 borderRadius: 10,
-                background: game.is_active ? 'rgba(0,255,136,0.15)' : 'rgba(255,68,68,0.15)',
-                color: game.is_active ? 'var(--accent-green)' : '#ff4444',
+                background: status.bg,
+                color: status.color,
+                letterSpacing: '0.1em',
               }}>
-                {game.is_active ? 'LIVE' : 'HIDDEN'}
+                {status.label}
               </span>
             </div>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <Link href={gamePlayUrl(game.slug)} target="_blank" style={{
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', alignItems: 'center' }}>
+              {game.status === 'testing' && <PromoteButton gameId={game.id} />}
+              <Link href={game.status === 'live' ? gamePlayUrl(game.slug) : gameTestUrl(game.slug)} target="_blank" style={{
                 fontSize: 11, color: 'var(--text-muted)', textDecoration: 'none',
                 padding: '4px 8px', border: '1px solid #333', borderRadius: 4,
               }}>
-                PLAY
+                {game.status === 'live' ? 'PLAY' : 'TEST'}
               </Link>
               <Link href={`/admin/games/${game.id}`} style={{
                 fontSize: 11, color: 'var(--accent-green)', textDecoration: 'none',
@@ -135,7 +156,8 @@ export default async function AdminGamesPage() {
               </Link>
             </div>
           </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

@@ -21,47 +21,52 @@ export default function TVScreen({ game, isOn, onGameLoad }: TVScreenProps) {
     }
   }, [isOn])
 
+  /* Bezel thickness in px — used for both the CSS padding and the inset */
+  const BEZEL = 14
+
   return (
     <div style={{
       width: '100%',
       aspectRatio: '16/9',
       background: 'var(--tv-frame)',
-      borderRadius: 12,
-      padding: 16,
+      borderRadius: 14,
+      /* No CSS padding — the screen is inset absolutely so it reliably fills */
       boxShadow: '0 0 60px rgba(0,0,0,0.8), inset 0 0 0 2px #2a2a4a',
       position: 'relative',
     }}>
-      {/* TV bezel details */}
+      {/* TV power LED — top-left corner */}
       <div style={{
         position: 'absolute',
-        top: 8, left: 8,
-        width: 8, height: 8,
+        top: 9, left: 9,
+        width: 7, height: 7,
         borderRadius: '50%',
         background: isOn ? 'var(--accent-green)' : '#333',
         boxShadow: isOn ? '0 0 8px var(--accent-green)' : 'none',
         transition: 'all 0.3s',
+        zIndex: 2,
       }} />
+      {/* Brand mark — bottom-right */}
       <div style={{
         position: 'absolute',
-        bottom: 10, right: 20,
-        fontSize: 9,
-        color: '#333',
+        bottom: 8, right: 16,
+        fontSize: 8,
+        color: '#2a2a4a',
         letterSpacing: '0.2em',
         fontWeight: 'bold',
+        zIndex: 2,
       }}>
         HOW GAMERS GAME
       </div>
 
-      {/* The screen */}
+      {/* The screen — absolutely inset so it reliably fills the bezel */}
       <div
         ref={screenRef}
         className={isOn ? 'screen-active' : ''}
         style={{
-          width: '100%',
-          height: '100%',
+          position: 'absolute',
+          inset: BEZEL,
           background: isOn ? 'var(--tv-screen)' : '#000',
-          borderRadius: 6,
-          position: 'relative',
+          borderRadius: 4,
           overflow: 'hidden',
           transition: 'background 0.3s',
         }}
