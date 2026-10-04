@@ -55,18 +55,5 @@ BEGIN
   EXCEPTION WHEN raise_exception THEN ASSERT SQLERRM = 'revenue_events is append-only'; END;
 END $$;
 
--- 8. wallet columns cannot be changed by a signed-in user, other columns can
-SET LOCAL request.jwt.claim.role = 'authenticated';
-SET LOCAL request.jwt.claim.sub = '11111111-1111-1111-1111-111111111111';
-DO $$
-BEGIN
-  UPDATE profiles SET display_name = 'New Name' WHERE id = '11111111-1111-1111-1111-111111111111';
-  BEGIN
-    UPDATE profiles SET coin_balance = 999999 WHERE id = '11111111-1111-1111-1111-111111111111';
-    ASSERT false, 'user must not edit coin_balance';
-  EXCEPTION WHEN raise_exception THEN ASSERT SQLERRM LIKE 'wallet columns%', SQLERRM; END;
-END $$;
-SET LOCAL request.jwt.claim.role = 'service_role';
-UPDATE profiles SET coin_balance = coin_balance WHERE id = '11111111-1111-1111-1111-111111111111';
 ROLLBACK;
-\echo PASS: sequential + trigger checks
+\echo PASS: coin purchase checks

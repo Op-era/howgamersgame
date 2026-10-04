@@ -35,7 +35,7 @@ Set in the hosting environment (Fly secrets or equivalent). Never commit values.
 
 Run in this order. Both files are safe to re-run.
 
-1. `src/lib/supabase/migrations/2026-10-04-coin-purchase-ledger.sql` creates `stripe_events`, `revenue_events` (append-only), the `stripe_checkout_session_id` column, and `credit_coin_purchase()` (executable by `service_role` only). The same SQL is mirrored at the end of `schema.sql` for fresh installs.
+1. `src/lib/supabase/migrations/2026-10-04-a-coin-purchase-ledger.sql` creates `stripe_events`, `revenue_events` (append-only), the `stripe_checkout_session_id` column, and `credit_coin_purchase()` (executable by `service_role` only). The same SQL is mirrored at the end of `schema.sql` for fresh installs.
 2. `src/lib/supabase/migrations/2026-10-04-protect-wallet-columns.sql` (**strongly recommended before real money**). The existing RLS policy "Users can update own profile" lets any signed-in user edit their own `coin_balance` from the browser with the public anon key. This trigger blocks that. The service role and SQL editor are unaffected. Existing server routes (spend, award, balance) use the admin client, so they keep working.
 
 Verified against a scratch PostgreSQL 18 with `schema.sql` plus both migrations applied: `tests/sql/coin-purchase.sql` and `tests/sql/concurrency.sh` (see "Tests").

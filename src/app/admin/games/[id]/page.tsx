@@ -1,5 +1,5 @@
 import { requireAdmin } from '@/lib/auth/adminGuard'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { notFound } from 'next/navigation'
 import GameForm from '../GameForm'
 import ApiKeyManager from './ApiKeyManager'
@@ -15,7 +15,9 @@ export default async function EditGamePage({ params }: { params: Promise<{ id: s
   const { data: game } = await supabase.from('games').select('*').eq('id', id).single()
   if (!game) notFound()
 
-  const { data: apiKeys } = await supabase
+  // game_api_keys is service role only (it holds credentials); requireAdmin() above gates this page
+  const adminSupabase = await createAdminClient()
+  const { data: apiKeys } = await adminSupabase
     .from('game_api_keys')
     .select('id, key_prefix, name, is_active, last_used_at, created_at')
     .eq('game_id', id)
