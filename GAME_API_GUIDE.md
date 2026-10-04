@@ -85,10 +85,15 @@ Content-Type: application/json
 ```
 
 **Error responses:**
+- `400` — Invalid `userId`, `amount` (must be a positive whole number), or `Idempotency-Key`
 - `401` — Invalid API key
-- `402` — Insufficient coins
+- `402` — Insufficient coins (nothing was deducted)
 - `404` — User not found
-- `409` — Concurrent update — retry the request
+- `409` — That `Idempotency-Key` was already used for a different request
+
+#### Retrying safely: `Idempotency-Key`
+
+Send a unique `Idempotency-Key` header (8 to 128 characters: letters, numbers, `_ . : -`) for every logical purchase, for example your own order id. If a request times out, **retry with the same key**. The first call is applied once; any repeat returns the original result with `"replayed": true` and changes nothing. Keys are scoped to your game and to spend or award separately. You can send the key as `idempotencyKey` in the JSON body instead. Without a key a retry is a new spend, so always send one. The platform may make the key mandatory.
 
 ---
 
@@ -117,6 +122,8 @@ Content-Type: application/json
   "balance": 2200
 }
 ```
+
+Awards are only accepted with your game's API key, which must stay on your server, so a player can never award coins to themselves. Use `Idempotency-Key` exactly as for spending so a retry cannot award twice. Errors are the same as for spending (no `402`).
 
 ---
 
