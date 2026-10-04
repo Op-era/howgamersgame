@@ -50,6 +50,8 @@ export async function POST(request: NextRequest) {
         p_gross_cents: p.grossCents,
         p_currency: p.currency,
         p_description: `Purchased ${p.pack.name} pack (${p.coins.toLocaleString('en-US')} coins)`,
+        p_terms_version: p.termsVersion,
+        p_terms_accepted_at: p.termsAcceptedAt,
       })
       if (error) throw new Error(error.message)
       const r = data as { status?: string; balance_after?: number } | null

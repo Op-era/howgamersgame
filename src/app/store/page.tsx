@@ -4,7 +4,9 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Navigation from '@/components/layout/Navigation'
 import type { User } from '@supabase/supabase-js'
+import Link from 'next/link'
 import { COIN_PACKAGES } from '@/lib/coins/packs'
+import { COIN_TERMS_SUMMARY, COIN_TERMS_VERSION } from '@/lib/coins/terms'
 import type { PurchaseHistoryItem } from '@/lib/coins/history'
 
 // Derived from the shared server pack table so the store can never drift from what is charged.
@@ -27,6 +29,7 @@ export default function StorePage() {
   const [coinBalance, setCoinBalance] = useState(0)
   const [loading, setLoading] = useState<string | null>(null)
   const [transactions, setTransactions] = useState<Array<{ id: string; type: string; amount: number; description: string | null; created_at: string }>>([])
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [purchases, setPurchases] = useState<PurchaseHistoryItem[]>([])
   const supabase = createClient()
 
@@ -58,19 +61,24 @@ export default function StorePage() {
       return
     }
 
+    if (!acceptedTerms) return
+
     setLoading(pkg.id)
     try {
       const res = await fetch('/api/coins/purchase', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ packageId: pkg.id }),
+        body: JSON.stringify({ packageId: pkg.id, acceptedTerms: true, termsVersion: COIN_TERMS_VERSION }),
       })
       const { checkoutUrl, error } = await res.json()
       if (error || !checkoutUrl) throw new Error(error ?? 'No checkout URL returned')
       window.location.href = checkoutUrl
     } catch (err) {
       console.error(err)
-      alert('Payment error. You have not been charged. Please try again.')
+      const message = err instanceof Error && /terms/i.test(err.message)
+        ? err.message
+        : 'Payment error. You have not been charged. Please try again.'
+      alert(message)
     } finally {
       setLoading(null)
     }
@@ -109,6 +117,41 @@ export default function StorePage() {
             </div>
           )}
         </div>
+
+        {/* Required acceptance of the coin purchase terms before any checkout */}
+        <label
+          htmlFor="accept-coin-terms"
+          style={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 12,
+            maxWidth: 640,
+            margin: '0 auto 24px',
+            padding: '14px 18px',
+            background: 'var(--console-dark)',
+            border: `1px solid ${acceptedTerms ? 'var(--accent-green)' : 'var(--accent-gold)'}`,
+            borderRadius: 8,
+            fontSize: 13,
+            lineHeight: 1.6,
+            color: '#fff',
+            cursor: 'pointer',
+          }}
+        >
+          <input
+            id="accept-coin-terms"
+            type="checkbox"
+            checked={acceptedTerms}
+            onChange={e => setAcceptedTerms(e.target.checked)}
+            style={{ marginTop: 4, width: 18, height: 18, flexShrink: 0, cursor: 'pointer' }}
+          />
+          <span>
+            I have read and agree to the{' '}
+            <Link href="/terms#coins" target="_blank" style={{ color: 'var(--accent-green)' }}>
+              coin purchase terms
+            </Link>
+            . {COIN_TERMS_SUMMARY}
+          </span>
+        </label>
 
         {/* Coin packages */}
         <div style={{
@@ -197,7 +240,7 @@ export default function StorePage() {
 
                 <button
                   onClick={() => handlePurchase(pkg)}
-                  disabled={!!loading}
+                  disabled={!!loading || !acceptedTerms}
                   style={{
                     width: '100%',
                     background: loading === pkg.id
@@ -212,12 +255,13 @@ export default function StorePage() {
                     fontSize: 12,
                     fontWeight: 'bold',
                     letterSpacing: '0.1em',
-                    cursor: loading ? 'not-allowed' : 'pointer',
+                    cursor: loading || !acceptedTerms ? 'not-allowed' : 'pointer',
+                    opacity: acceptedTerms ? 1 : 0.5,
                     fontFamily: 'inherit',
                     transition: 'opacity 0.2s',
                   }}
                 >
-                  {loading === pkg.id ? 'REDIRECTING...' : `BUY ${pkg.coins.toLocaleString()} COINS`}
+                  {loading === pkg.id ? 'REDIRECTING...' : acceptedTerms ? `BUY ${pkg.coins.toLocaleString()} COINS` : 'ACCEPT TERMS TO BUY'}
                 </button>
               </div>
             )
@@ -315,7 +359,7 @@ export default function StorePage() {
         }}>
           <strong style={{ color: '#fff' }}>About Coins:</strong> 1 coin = $0.01 base value.
           Coins are used inside games for upgrades, cosmetics, unlocks, and other in-game purchases.
-          Coins are non-refundable and have no cash value. Each game determines what coins can be used for.
+          {COIN_TERMS_SUMMARY} Each game determines what coins can be used for.
         </div>
       </div>
     </div>

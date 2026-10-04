@@ -11,7 +11,7 @@ DO $$
 DECLARE r jsonb; bal int; n int;
 BEGIN
   -- 1. first delivery credits
-  r := credit_coin_purchase('evt_1','checkout.session.completed','cs_1','pi_1','11111111-1111-1111-1111-111111111111','player',550,50,500,'usd','Purchased Player pack');
+  r := credit_coin_purchase('evt_1','checkout.session.completed','cs_1','pi_1','11111111-1111-1111-1111-111111111111','player',550,50,500,'usd','Purchased Player pack','2026-10-04','2026-10-04T10:00:00Z');
   ASSERT r->>'status' = 'credited' AND (r->>'balance_after')::int = 550, 'first credit: ' || r;
   -- 2. same event again: no double credit
   r := credit_coin_purchase('evt_1','checkout.session.completed','cs_1','pi_1','11111111-1111-1111-1111-111111111111','player',550,50,500,'usd','x');
@@ -27,6 +27,7 @@ BEGIN
   ASSERT n = 1, 'tx rows = ' || n;
   SELECT count(*) INTO n FROM revenue_events;
   ASSERT n = 1, 'revenue rows = ' || n;
+  ASSERT (SELECT terms_version FROM revenue_events) = '2026-10-04' AND (SELECT terms_accepted_at FROM revenue_events) = '2026-10-04T10:00:00Z', 'terms not recorded';
   -- 4. a second, real purchase stacks
   r := credit_coin_purchase('evt_3','checkout.session.completed','cs_2','pi_2','11111111-1111-1111-1111-111111111111','gamer',1200,200,1000,'usd','Purchased Gamer pack');
   ASSERT (r->>'balance_after')::int = 1750, 'stack: ' || r;

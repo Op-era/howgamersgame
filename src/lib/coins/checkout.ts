@@ -1,5 +1,6 @@
 import { COIN_CURRENCY, getPackageById } from './packs.ts'
 import type { CoinPackage } from './packs.ts'
+import { parseAcceptedAt } from './terms.ts'
 
 // Structural subset of Stripe.Checkout.Session that we rely on.
 export interface CheckoutSessionLike {
@@ -26,6 +27,8 @@ export interface ValidPurchase {
   paymentIntentId: string | null
   email: string | null
   customerName: string | null
+  termsVersion: string | null       // from checkout metadata; null only if a session pre dates the terms step
+  termsAcceptedAt: string | null    // ISO time stamped by our server at acceptance
 }
 
 export type ValidationResult =
@@ -86,6 +89,8 @@ export function validateCheckoutSession(session: CheckoutSessionLike): Validatio
       paymentIntentId,
       email: session.customer_email ?? session.customer_details?.email ?? null,
       customerName: session.customer_details?.name ?? null,
+      termsVersion: typeof meta.termsVersion === 'string' && meta.termsVersion ? meta.termsVersion.slice(0, 40) : null,
+      termsAcceptedAt: parseAcceptedAt(meta.termsAcceptedAt),
     },
   }
 }

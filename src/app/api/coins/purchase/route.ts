@@ -3,13 +3,17 @@ import type { NextRequest } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getStripe, getPackageById } from '@/lib/stripe/client'
 import { COIN_CURRENCY } from '@/lib/coins/packs'
+import { COIN_TERMS_SUMMARY, checkTermsAcceptance } from '@/lib/coins/terms'
 
 /**
  * POST /api/coins/purchase
- * Body: { packageId: string }
+ * Body: { packageId: string, acceptedTerms: true, termsVersion: string }
  *
  * Creates a Stripe Checkout session for a coin package.
- * User must be authenticated. Price and coin amount come from the server pack table;
+ * User must be authenticated and must have accepted the current coin purchase terms
+ * (all sales final, no refunds, no cash value). The acceptance time is stamped here, on the
+ * server, and stored in the Checkout Session and PaymentIntent metadata and then on the
+ * revenue_events row. Price and coin amount come from the server pack table;
  * nothing price-related is read from the request.
  */
 export async function POST(request: NextRequest) {
@@ -20,7 +24,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  let body: { packageId?: unknown }
+  let body: { packageId?: unknown; acceptedTerms?: unknown; termsVersion?: unknown }
   try {
     body = await request.json()
   } catch {
@@ -30,6 +34,11 @@ export async function POST(request: NextRequest) {
   const pkg = getPackageById(body?.packageId)
   if (!pkg) {
     return NextResponse.json({ error: 'Invalid package' }, { status: 400 })
+  }
+
+  const terms = checkTermsAcceptance(body)
+  if (!terms.ok) {
+    return NextResponse.json({ error: terms.error, code: terms.code }, { status: terms.status })
   }
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL
@@ -43,6 +52,8 @@ export async function POST(request: NextRequest) {
     userId: user.id,
     packageId: pkg.id,
     coins: String(pkg.coins), // informational only; the webhook credits from the server pack table
+    termsVersion: terms.version,
+    termsAcceptedAt: terms.acceptedAt,
   }
 
   try {
@@ -67,6 +78,8 @@ export async function POST(request: NextRequest) {
         },
       ],
       metadata,
+      // Shown on Stripe's payment page next to the pay button
+      custom_text: { submit: { message: COIN_TERMS_SUMMARY } },
       // Lets you find the user/pack from a Payment in the Stripe Dashboard or on refunds
       payment_intent_data: { metadata },
       // {CHECKOUT_SESSION_ID} is substituted by Stripe; the success page uses it to wait for the webhook

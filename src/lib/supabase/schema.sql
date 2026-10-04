@@ -191,8 +191,13 @@ CREATE TABLE IF NOT EXISTS revenue_events (
   stripe_checkout_session_id  TEXT NOT NULL,
   stripe_payment_intent_id    TEXT,
   coin_transaction_id         UUID REFERENCES coin_transactions(id) ON DELETE SET NULL,
+  terms_version               TEXT,          -- coin purchase terms the buyer accepted before checkout
+  terms_accepted_at           TIMESTAMPTZ,   -- server time of that acceptance
   created_at                  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- for databases where an earlier draft of this table already exists
+ALTER TABLE revenue_events ADD COLUMN IF NOT EXISTS terms_version TEXT;
+ALTER TABLE revenue_events ADD COLUMN IF NOT EXISTS terms_accepted_at TIMESTAMPTZ;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_revenue_events_purchase_session
   ON revenue_events(stripe_checkout_session_id)
   WHERE event_type = 'coin_purchase';
@@ -214,6 +219,8 @@ CREATE TRIGGER revenue_events_no_update
 -- 4. Atomic crediting. One transaction: dedupe event, dedupe session, bump the
 --    wallet with a single UPDATE (no read-modify-write), write both ledgers.
 --    Returns {"status": "credited" | "duplicate_event" | "duplicate_session", "balance_after": n}
+DROP FUNCTION IF EXISTS credit_coin_purchase(TEXT, TEXT, TEXT, TEXT, UUID, TEXT, INTEGER, INTEGER, INTEGER, TEXT, TEXT);
+
 CREATE OR REPLACE FUNCTION credit_coin_purchase(
   p_event_id           TEXT,
   p_event_type         TEXT,
@@ -225,7 +232,9 @@ CREATE OR REPLACE FUNCTION credit_coin_purchase(
   p_bonus_coins        INTEGER,
   p_gross_cents        INTEGER,
   p_currency           TEXT,
-  p_description        TEXT
+  p_description        TEXT,
+  p_terms_version      TEXT DEFAULT NULL,
+  p_terms_accepted_at  TIMESTAMPTZ DEFAULT NULL
 ) RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
@@ -281,19 +290,19 @@ BEGIN
   INSERT INTO revenue_events
     (event_type, user_id, package_id, gross_cents, currency, coins_credited,
      bonus_coins, stripe_event_id, stripe_checkout_session_id,
-     stripe_payment_intent_id, coin_transaction_id)
+     stripe_payment_intent_id, coin_transaction_id, terms_version, terms_accepted_at)
   VALUES
     ('coin_purchase', p_user_id, p_package_id, p_gross_cents, p_currency, p_coins,
      COALESCE(p_bonus_coins, 0), p_event_id, p_session_id,
-     p_payment_intent_id, v_tx_id);
+     p_payment_intent_id, v_tx_id, p_terms_version, p_terms_accepted_at);
 
   RETURN jsonb_build_object('status', 'credited', 'balance_after', v_balance);
 END;
 $$;
 
-REVOKE ALL ON FUNCTION credit_coin_purchase(TEXT, TEXT, TEXT, TEXT, UUID, TEXT, INTEGER, INTEGER, INTEGER, TEXT, TEXT)
+REVOKE ALL ON FUNCTION credit_coin_purchase(TEXT, TEXT, TEXT, TEXT, UUID, TEXT, INTEGER, INTEGER, INTEGER, TEXT, TEXT, TEXT, TIMESTAMPTZ)
   FROM PUBLIC, anon, authenticated;
-GRANT EXECUTE ON FUNCTION credit_coin_purchase(TEXT, TEXT, TEXT, TEXT, UUID, TEXT, INTEGER, INTEGER, INTEGER, TEXT, TEXT)
+GRANT EXECUTE ON FUNCTION credit_coin_purchase(TEXT, TEXT, TEXT, TEXT, UUID, TEXT, INTEGER, INTEGER, INTEGER, TEXT, TEXT, TEXT, TIMESTAMPTZ)
   TO service_role;
 
 -- ── 2026-10-04-b-wallet-protection.sql ──
