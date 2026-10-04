@@ -4,20 +4,30 @@ import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import Navigation from '@/components/layout/Navigation'
 import type { User } from '@supabase/supabase-js'
+import { COIN_PACKAGES } from '@/lib/coins/packs'
+import type { PurchaseHistoryItem } from '@/lib/coins/history'
 
-const PACKAGES = [
-  { id: 'player',  name: 'Player',  price: '$5',   priceCents: 500,   coins: 550,   bonus: 50,   description: '+10% bonus' },
-  { id: 'gamer',   name: 'Gamer',   price: '$10',  priceCents: 1000,  coins: 1200,  bonus: 200,  description: '+20% bonus' },
-  { id: 'pro',     name: 'Pro',     price: '$20',  priceCents: 2000,  coins: 2500,  bonus: 500,  description: '+25% bonus' },
-  { id: 'elite',   name: 'Elite',   price: '$40',  priceCents: 4000,  coins: 5200,  bonus: 1200, description: '+30% bonus — Best value' },
-  { id: 'legend',  name: 'Legend',  price: '$100', priceCents: 10000, coins: 14000, bonus: 4000, description: '+40% bonus — Max savings' },
-]
+// Derived from the shared server pack table so the store can never drift from what is charged.
+const PACKAGES = COIN_PACKAGES.map(p => {
+  const pct = Math.round((p.bonusCoins / (p.coins - p.bonusCoins)) * 100)
+  const note = p.id === 'elite' ? ' — Best value' : p.id === 'legend' ? ' — Max savings' : ''
+  return {
+    id: p.id,
+    name: p.name,
+    price: `$${p.priceCents / 100}`,
+    priceCents: p.priceCents,
+    coins: p.coins,
+    bonus: p.bonusCoins,
+    description: `+${pct}% bonus${note}`,
+  }
+})
 
 export default function StorePage() {
   const [user, setUser] = useState<User | null>(null)
   const [coinBalance, setCoinBalance] = useState(0)
   const [loading, setLoading] = useState<string | null>(null)
   const [transactions, setTransactions] = useState<Array<{ id: string; type: string; amount: number; description: string | null; created_at: string }>>([])
+  const [purchases, setPurchases] = useState<PurchaseHistoryItem[]>([])
   const supabase = createClient()
 
   useEffect(() => {
@@ -29,11 +39,15 @@ export default function StorePage() {
   }, [])
 
   async function loadProfile(userId: string) {
-    const [profileRes, txRes] = await Promise.all([
+    const [profileRes, txRes, purchasesRes] = await Promise.all([
       supabase.from('profiles').select('coin_balance').eq('id', userId).single(),
       supabase.from('coin_transactions').select('id, type, amount, description, created_at')
         .eq('user_id', userId).order('created_at', { ascending: false }).limit(10),
+      fetch('/api/coins/purchases', { cache: 'no-store' })
+        .then(r => (r.ok ? r.json() : { purchases: [] }))
+        .catch(() => ({ purchases: [] })),
     ])
+    setPurchases((purchasesRes.purchases ?? []) as PurchaseHistoryItem[])
     if (profileRes.data) setCoinBalance(profileRes.data.coin_balance)
     if (txRes.data) setTransactions(txRes.data)
   }
@@ -52,11 +66,11 @@ export default function StorePage() {
         body: JSON.stringify({ packageId: pkg.id }),
       })
       const { checkoutUrl, error } = await res.json()
-      if (error) throw new Error(error)
+      if (error || !checkoutUrl) throw new Error(error ?? 'No checkout URL returned')
       window.location.href = checkoutUrl
     } catch (err) {
       console.error(err)
-      alert('Payment error. Please try again.')
+      alert('Payment error. You have not been charged. Please try again.')
     } finally {
       setLoading(null)
     }
@@ -209,6 +223,43 @@ export default function StorePage() {
             )
           })}
         </div>
+
+        {/* Purchase history (coin purchases only; confirmed by Stripe) */}
+        {user && purchases.length > 0 && (
+          <div style={{ marginBottom: 32 }}>
+            <h2 style={{ fontSize: 16, letterSpacing: '0.15em', color: 'var(--text-muted)', marginBottom: 16 }}>
+              PURCHASE HISTORY
+            </h2>
+            <div style={{
+              background: 'var(--console-body)',
+              border: '1px solid #1a1a3e',
+              borderRadius: 8,
+              overflow: 'hidden',
+            }}>
+              {purchases.map((p, i) => (
+                <div key={p.sessionId} style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '12px 20px',
+                  borderBottom: i < purchases.length - 1 ? '1px solid #1a1a3e' : 'none',
+                }}>
+                  <div>
+                    <div style={{ fontSize: 12, color: '#fff', marginBottom: 2 }}>
+                      {p.packageName} pack · ${(p.grossCents / 100).toFixed(2)}
+                    </div>
+                    <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>
+                      {new Date(p.createdAt).toLocaleDateString()}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 'bold', color: 'var(--accent-green)' }}>
+                    +{p.coins.toLocaleString()} ⬡
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Transaction history */}
         {user && transactions.length > 0 && (
