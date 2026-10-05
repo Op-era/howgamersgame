@@ -1,13 +1,26 @@
 import { Resend } from 'resend'
 import { escapeHtml } from '@/lib/coins/html'
 
-export const resend = new Resend(process.env.RESEND_API_KEY!)
+let cached: Resend | null = null
 
-const FROM = () => process.env.RESEND_FROM_EMAIL!
+/** Lazy so importing this module during `next build` never throws when RESEND_API_KEY is unset (Vercel preview). */
+function getResend(): Resend {
+  if (cached) return cached
+  const key = process.env.RESEND_API_KEY
+  if (!key) throw new Error('RESEND_API_KEY is not set')
+  cached = new Resend(key)
+  return cached
+}
+
+const FROM = () => {
+  const from = process.env.RESEND_FROM_EMAIL
+  if (!from) throw new Error('RESEND_FROM_EMAIL is not set')
+  return from
+}
 const APP_URL = () => process.env.NEXT_PUBLIC_APP_URL || 'https://howgamersgame.online'
 
 export async function sendConfirmationEmail(to: string, displayName: string, confirmUrl: string) {
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM(),
     to,
     subject: 'Confirm your HowGamersGame account',
@@ -24,7 +37,7 @@ export async function sendConfirmationEmail(to: string, displayName: string, con
 }
 
 export async function sendPasswordResetEmail(to: string, resetUrl: string) {
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM(),
     to,
     subject: 'Reset your HowGamersGame password',
@@ -46,7 +59,7 @@ export async function sendCoinPurchaseEmail(
   coins: number,
   amountCents: number
 ) {
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM(),
     to,
     subject: `You got ${coins.toLocaleString()} coins! 🎮`,

@@ -2,17 +2,19 @@ import { createClient } from '@supabase/supabase-js'
 import { sendPasswordResetEmail } from '@/lib/resend/client'
 import { NextResponse } from 'next/server'
 
-const admin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-)
+function getAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!url || !key) throw new Error('Supabase admin is not configured')
+  return createClient(url, key)
+}
 
 export async function POST(req: Request) {
   const { email } = await req.json()
 
   const redirectTo = `${process.env.NEXT_PUBLIC_APP_URL}/auth/callback?next=/auth/update-password`
 
-  const { data, error } = await admin.auth.admin.generateLink({
+  const { data, error } = await getAdmin().auth.admin.generateLink({
     type: 'recovery',
     email,
     options: { redirectTo },
