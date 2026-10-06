@@ -1,13 +1,14 @@
 import Navigation from '@/components/layout/Navigation'
 import Link from 'next/link'
 import type { Metadata } from 'next'
+import { COIN_TERMS_VERSION } from '@/lib/coins/terms'
 
 export const metadata: Metadata = {
   title: 'Terms of Service — HowGamersGame',
   description: 'Terms of Service for HowGamersGame. Rules, rights, and responsibilities for using our platform.',
 }
 
-const LAST_UPDATED = 'June 16, 2025'
+const LAST_UPDATED = 'October 4, 2026'
 
 export default function TermsPage() {
   return (
@@ -43,13 +44,22 @@ export default function TermsPage() {
 We reserve the right to terminate accounts that violate these terms, engage in cheating, exploit game mechanics, or engage in any abusive behavior toward other users.`,
           },
           {
-            title: '4. COIN ECONOMY',
-            body: `HowGamersGame operates a virtual coin system. Coins are:
-• Earned by playing games and achieving in-game milestones
-• Purchasable through the coin store using real money
-• Redeemable for in-game boosts, features, and premium content within the HowGamersGame platform
+            id: 'coins',
+            title: '4. COIN ECONOMY AND COIN PURCHASES',
+            body: `HowGamersGame has a virtual coin system. Coins can be:
+• Earned by playing games and reaching milestones in games
+• Bought in the coin store with real money
+• Spent on boosts, features, and other content inside HowGamersGame
 
-Coins have no monetary value outside of HowGamersGame and cannot be transferred, exchanged for cash, or refunded. Purchased coins are non-refundable except where required by applicable law. We reserve the right to modify coin prices, earning rates, and redemption options at any time.`,
+ALL COIN PURCHASES ARE FINAL. We do not give refunds for coins. We do not take coins back or reverse a purchase after you pay. You must accept this before you pay, and by buying coins you agree to it.
+
+Coins have no cash value. You cannot sell, trade, or transfer coins, and you cannot exchange them for money. Coins only work inside HowGamersGame.
+
+If you ask your bank or card company to reverse a coin purchase, these terms still apply, and we may suspend your account while we look into it.
+
+If a law where you live gives you a right that these terms cannot take away, that law applies.
+
+We can change coin prices, earning rates, and what coins can be used for at any time. Coin purchase terms version: ${COIN_TERMS_VERSION}.`,
           },
           {
             title: '5. SUBSCRIPTIONS',
@@ -112,8 +122,8 @@ Haven Command LLC
 Email: witprod@gmail.com
 Website: https://howgamersgame.online/contact`,
           },
-        ].map(({ title, body }) => (
-          <section key={title} style={{ marginBottom: 36 }}>
+        ].map(({ id, title, body }: { id?: string; title: string; body: string }) => (
+          <section key={title} id={id} style={{ marginBottom: 36, scrollMarginTop: 60 }}>
             <h2 style={{ color: 'var(--accent-gold)', fontSize: 12, letterSpacing: '0.15em', marginBottom: 12 }}>
               {title}
             </h2>

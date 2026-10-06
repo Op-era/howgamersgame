@@ -7,12 +7,16 @@ export const revalidate = 60
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
-  const supabase = await createClient()
-  const { data } = await supabase.from('games').select('title, description').eq('slug', slug).single()
-  if (!data) return {}
-  return {
-    title: `${data.title} — HowGamersGame`,
-    description: data.description ?? undefined,
+  try {
+    const supabase = await createClient()
+    const { data } = await supabase.from('games').select('title, description').eq('slug', slug).single()
+    if (!data) return {}
+    return {
+      title: `${data.title} — HowGamersGame`,
+      description: data.description ?? undefined,
+    }
+  } catch {
+    return {}
   }
 }
 

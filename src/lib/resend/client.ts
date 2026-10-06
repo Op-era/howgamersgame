@@ -1,12 +1,26 @@
 import { Resend } from 'resend'
+import { escapeHtml } from '@/lib/coins/html'
 
-export const resend = new Resend(process.env.RESEND_API_KEY!)
+let cached: Resend | null = null
 
-const FROM = () => process.env.RESEND_FROM_EMAIL!
+/** Lazy so importing this module during `next build` never throws when RESEND_API_KEY is unset (Vercel preview). */
+function getResend(): Resend {
+  if (cached) return cached
+  const key = process.env.RESEND_API_KEY
+  if (!key) throw new Error('RESEND_API_KEY is not set')
+  cached = new Resend(key)
+  return cached
+}
+
+const FROM = () => {
+  const from = process.env.RESEND_FROM_EMAIL
+  if (!from) throw new Error('RESEND_FROM_EMAIL is not set')
+  return from
+}
 const APP_URL = () => process.env.NEXT_PUBLIC_APP_URL || 'https://howgamersgame.online'
 
 export async function sendConfirmationEmail(to: string, displayName: string, confirmUrl: string) {
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM(),
     to,
     subject: 'Confirm your HowGamersGame account',
@@ -23,7 +37,7 @@ export async function sendConfirmationEmail(to: string, displayName: string, con
 }
 
 export async function sendPasswordResetEmail(to: string, resetUrl: string) {
-  await resend.emails.send({
+  await getResend().emails.send({
     from: FROM(),
     to,
     subject: 'Reset your HowGamersGame password',
@@ -45,21 +59,21 @@ export async function sendCoinPurchaseEmail(
   coins: number,
   amountCents: number
 ) {
-  await resend.emails.send({
-    from: process.env.RESEND_FROM_EMAIL!,
+  await getResend().emails.send({
+    from: FROM(),
     to,
     subject: `You got ${coins.toLocaleString()} coins! 🎮`,
     html: `
       <div style="font-family: monospace; background: #0a0a0f; color: #00ff88; padding: 32px; border-radius: 8px; max-width: 480px;">
         <h1 style="color: #00ff88; font-size: 24px; margin: 0 0 16px;">COINS LOADED ⚡</h1>
-        <p style="color: #ccc; margin: 0 0 24px;">Hey ${displayName},</p>
-        <p style="color: #ccc;">Your <strong style="color: #00ff88;">${packageName}</strong> pack has been delivered.</p>
+        <p style="color: #ccc; margin: 0 0 24px;">Hey ${escapeHtml(displayName)},</p>
+        <p style="color: #ccc;">Your <strong style="color: #00ff88;">${escapeHtml(packageName)}</strong> pack has been delivered.</p>
         <div style="background: #1a1a2e; border: 1px solid #00ff88; border-radius: 8px; padding: 24px; margin: 24px 0; text-align: center;">
           <div style="font-size: 48px; color: #ffd700; font-weight: bold;">${coins.toLocaleString()}</div>
           <div style="color: #888; font-size: 14px; margin-top: 8px;">COINS ADDED TO YOUR WALLET</div>
         </div>
         <p style="color: #666; font-size: 12px;">Amount charged: $${(amountCents / 100).toFixed(2)}</p>
-        <a href="${process.env.NEXT_PUBLIC_APP_URL}" style="display: inline-block; background: #00ff88; color: #000; padding: 12px 24px; border-radius: 4px; text-decoration: none; font-weight: bold; margin-top: 16px;">PLAY NOW →</a>
+        <a href="${APP_URL()}" style="display: inline-block; background: #00ff88; color: #000; padding: 12px 24px; border-radius: 4px; text-decoration: none; font-weight: bold; margin-top: 16px;">PLAY NOW →</a>
       </div>
     `,
   })
