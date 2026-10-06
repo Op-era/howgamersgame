@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { createServiceClient } from '@/lib/supabase/service'
+import { query } from '@/lib/db/pg'
 import { verifyGameApiKey } from '@/lib/auth/gameApiKey'
 import { mapWalletResult, parseWalletRequest } from '@/lib/coins/wallet'
 
@@ -39,14 +39,21 @@ export async function POST(request: NextRequest) {
   }
   const { userId, amount, reason, idempotencyKey } = parsed.value
 
-  const { data, error } = await createServiceClient().rpc('award_coins', {
-    p_user_id: userId,
-    p_game_id: authResult.gameId,
-    p_amount: amount,
-    p_reason: reason ?? `Awarded in ${authResult.gameName ?? 'game'}`,
-    p_idempotency_key: idempotencyKey,
-  })
-  if (error) console.error('[coins/award] rpc failed', error.message)
+  let data: { status?: string; balance?: number } | null = null
+  let error: { message: string } | null = null
+  try {
+    const r = await query(`SELECT award_coins($1,$2,$3,$4,$5) AS result`, [
+      userId,
+      authResult.gameId,
+      amount,
+      reason ?? `Awarded in ${authResult.gameName ?? 'game'}`,
+      idempotencyKey,
+    ])
+    data = (r.rows[0] as { result: { status?: string; balance?: number } }).result
+  } catch (err) {
+    error = { message: err instanceof Error ? err.message : 'award_coins failed' }
+    console.error('[coins/award] query failed', error.message)
+  }
 
   const outcome = mapWalletResult('award', amount, { data, error })
   return NextResponse.json(outcome.body, { status: outcome.status })

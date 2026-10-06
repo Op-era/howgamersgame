@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { createAdminClient } from '@/lib/supabase/server'
+import { query } from '@/lib/db/pg'
 import { verifyGameApiKey } from '@/lib/auth/gameApiKey'
 
 /**
@@ -20,16 +20,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'userId is required' }, { status: 400 })
   }
 
-  const supabase = await createAdminClient()
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('coin_balance')
-    .eq('id', userId)
-    .single()
-
-  if (error || !data) {
+  const r = await query('SELECT coin_balance FROM profiles WHERE id = $1', [userId])
+  const row = r.rows[0] as { coin_balance: number } | undefined
+  if (!row) {
     return NextResponse.json({ error: 'User not found' }, { status: 404 })
   }
 
-  return NextResponse.json({ userId, balance: data.coin_balance })
+  return NextResponse.json({ userId, balance: row.coin_balance })
 }

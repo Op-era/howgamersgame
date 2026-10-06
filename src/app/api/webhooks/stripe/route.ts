@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
 import { getStripe } from '@/lib/stripe/client'
-import { createServiceClient } from '@/lib/supabase/service'
+import { query } from '@/lib/db/pg'
 import { sendCoinPurchaseEmail } from '@/lib/resend/client'
 import { handleStripeEvent } from '@/lib/coins/webhook'
 import type { CreditResult, StripeEventLike } from '@/lib/coins/webhook'
@@ -37,28 +37,26 @@ export async function POST(request: NextRequest) {
 
   const outcome = await handleStripeEvent(event, {
     creditPurchase: async (eventId, eventType, p): Promise<CreditResult> => {
-      const supabase = createServiceClient()
-      const { data, error } = await supabase.rpc('credit_coin_purchase', {
-        p_event_id: eventId,
-        p_event_type: eventType,
-        p_session_id: p.sessionId,
-        p_payment_intent_id: p.paymentIntentId,
-        p_user_id: p.userId,
-        p_package_id: p.pack.id,
-        p_coins: p.coins,
-        p_bonus_coins: p.bonusCoins,
-        p_gross_cents: p.grossCents,
-        p_currency: p.currency,
-        p_description: `Purchased ${p.pack.name} pack (${p.coins.toLocaleString('en-US')} coins)`,
-        p_terms_version: p.termsVersion,
-        p_terms_accepted_at: p.termsAcceptedAt,
-      })
-      if (error) throw new Error(error.message)
-      const r = data as { status?: string; balance_after?: number } | null
-      if (r?.status === 'credited') return { status: 'credited', balanceAfter: r.balance_after ?? 0 }
-      if (r?.status === 'duplicate_event') return { status: 'duplicate_event' }
-      if (r?.status === 'duplicate_session') return { status: 'duplicate_session' }
-      throw new Error(`unexpected credit_coin_purchase result: ${JSON.stringify(r)}`)
+      let rows: { credit_coin_purchase: { status?: string; balance_after?: number } }[]
+      try {
+        const r = await query(
+          `SELECT credit_coin_purchase($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) AS credit_coin_purchase`,
+          [
+            eventId, eventType, p.sessionId, p.paymentIntentId, p.userId,
+            p.pack.id, p.coins, p.bonusCoins, p.grossCents, p.currency,
+            `Purchased ${p.pack.name} pack (${p.coins.toLocaleString('en-US')} coins)`,
+            p.termsVersion, p.termsAcceptedAt,
+          ]
+        )
+        rows = r.rows as { credit_coin_purchase: { status?: string; balance_after?: number } }[]
+      } catch (err) {
+        throw new Error(err instanceof Error ? err.message : 'credit_coin_purchase failed')
+      }
+      const result = rows[0]?.credit_coin_purchase
+      if (result?.status === 'credited') return { status: 'credited', balanceAfter: result.balance_after ?? 0 }
+      if (result?.status === 'duplicate_event') return { status: 'duplicate_event' }
+      if (result?.status === 'duplicate_session') return { status: 'duplicate_session' }
+      throw new Error(`unexpected credit_coin_purchase result: ${JSON.stringify(result)}`)
     },
     sendEmail: async p => {
       if (!p.email) return

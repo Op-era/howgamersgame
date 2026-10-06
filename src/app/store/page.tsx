@@ -1,9 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
 import Navigation from '@/components/layout/Navigation'
-import type { User } from '@supabase/supabase-js'
 import Link from 'next/link'
 import { COIN_PACKAGES } from '@/lib/coins/packs'
 import { COIN_TERMS_SUMMARY, COIN_TERMS_VERSION } from '@/lib/coins/terms'
@@ -24,43 +22,76 @@ const PACKAGES = COIN_PACKAGES.map(p => {
   }
 })
 
+interface SessionUser {
+  id: string
+  email: string
+  coin_balance: number
+}
+
 export default function StorePage() {
-  const [user, setUser] = useState<User | null>(null)
+  const [user, setUser] = useState<SessionUser | null>(null)
   const [coinBalance, setCoinBalance] = useState(0)
   const [loading, setLoading] = useState<string | null>(null)
   const [transactions, setTransactions] = useState<Array<{ id: string; type: string; amount: number; description: string | null; created_at: string }>>([])
   const [acceptedTerms, setAcceptedTerms] = useState(false)
   const [purchases, setPurchases] = useState<PurchaseHistoryItem[]>([])
-  const supabase = createClient()
+  const [email, setEmail] = useState('')
+  const [loginBusy, setLoginBusy] = useState(false)
+  const [loginError, setLoginError] = useState('')
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user)
-      if (data.user) loadProfile(data.user.id)
-    })
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    fetch('/api/auth/me', { cache: 'no-store' })
+      .then(r => r.json())
+      .then(d => {
+        if (d.user) {
+          setUser(d.user)
+          setCoinBalance(d.user.coin_balance ?? 0)
+          loadLists()
+        }
+      })
+      .catch(() => {})
   }, [])
 
-  async function loadProfile(userId: string) {
-    const [profileRes, txRes, purchasesRes] = await Promise.all([
-      supabase.from('profiles').select('coin_balance').eq('id', userId).single(),
-      supabase.from('coin_transactions').select('id, type, amount, description, created_at')
-        .eq('user_id', userId).order('created_at', { ascending: false }).limit(10),
+  async function loadLists() {
+    const [txRes, purchasesRes] = await Promise.all([
+      fetch('/api/coins/transactions', { cache: 'no-store' })
+        .then(r => (r.ok ? r.json() : { transactions: [] }))
+        .catch(() => ({ transactions: [] })),
       fetch('/api/coins/purchases', { cache: 'no-store' })
         .then(r => (r.ok ? r.json() : { purchases: [] }))
         .catch(() => ({ purchases: [] })),
     ])
+    setTransactions(txRes.transactions ?? [])
     setPurchases((purchasesRes.purchases ?? []) as PurchaseHistoryItem[])
-    if (profileRes.data) setCoinBalance(profileRes.data.coin_balance)
-    if (txRes.data) setTransactions(txRes.data)
+  }
+
+  async function handleLogin(e: React.FormEvent) {
+    e.preventDefault()
+    setLoginError('')
+    setLoginBusy(true)
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email }),
+      })
+      const d = await res.json()
+      if (!res.ok || !d.ok) throw new Error(d.error ?? 'Sign in failed')
+      const me = await fetch('/api/auth/me', { cache: 'no-store' }).then(r => r.json())
+      if (me.user) {
+        setUser(me.user)
+        setCoinBalance(me.user.coin_balance ?? 0)
+        loadLists()
+      }
+    } catch (err) {
+      setLoginError(err instanceof Error ? err.message : 'Sign in failed')
+    } finally {
+      setLoginBusy(false)
+    }
   }
 
   async function handlePurchase(pkg: typeof PACKAGES[number]) {
-    if (!user) {
-      window.location.href = '/auth/login'
-      return
-    }
-
+    if (!user) return
     if (!acceptedTerms) return
 
     setLoading(pkg.id)
@@ -98,7 +129,7 @@ export default function StorePage() {
             Buy coins to spend on upgrades, unlocks, and more inside any game.
           </p>
 
-          {user && (
+          {user ? (
             <div style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -115,6 +146,43 @@ export default function StorePage() {
               </span>
               <span style={{ color: 'var(--text-muted)', fontSize: 12 }}>YOUR BALANCE</span>
             </div>
+          ) : (
+            <form onSubmit={handleLogin} style={{ marginTop: 16, display: 'flex', gap: 8, justifyContent: 'center', flexWrap: 'wrap' }}>
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                placeholder="you@email.com"
+                style={{
+                  padding: '10px 14px',
+                  borderRadius: 6,
+                  border: '1px solid #1a1a3e',
+                  background: 'var(--console-dark)',
+                  color: '#fff',
+                  fontSize: 14,
+                  minWidth: 240,
+                }}
+              />
+              <button
+                type="submit"
+                disabled={loginBusy}
+                style={{
+                  padding: '10px 20px',
+                  borderRadius: 6,
+                  border: 'none',
+                  background: 'var(--accent-green)',
+                  color: '#000',
+                  fontWeight: 'bold',
+                  fontSize: 12,
+                  letterSpacing: '0.1em',
+                  cursor: loginBusy ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {loginBusy ? 'SIGNING IN...' : 'SIGN IN TO BUY'}
+              </button>
+              {loginError && <div style={{ width: '100%', color: '#ff4444', fontSize: 12 }}>{loginError}</div>}
+            </form>
           )}
         </div>
 
@@ -160,7 +228,7 @@ export default function StorePage() {
           gap: 16,
           marginBottom: 48,
         }}>
-          {PACKAGES.map((pkg, i) => {
+          {PACKAGES.map((pkg) => {
             const isPopular = pkg.id === 'elite'
             return (
               <div
@@ -240,7 +308,7 @@ export default function StorePage() {
 
                 <button
                   onClick={() => handlePurchase(pkg)}
-                  disabled={!!loading || !acceptedTerms}
+                  disabled={!!loading || !acceptedTerms || !user}
                   style={{
                     width: '100%',
                     background: loading === pkg.id
@@ -255,13 +323,13 @@ export default function StorePage() {
                     fontSize: 12,
                     fontWeight: 'bold',
                     letterSpacing: '0.1em',
-                    cursor: loading || !acceptedTerms ? 'not-allowed' : 'pointer',
-                    opacity: acceptedTerms ? 1 : 0.5,
+                    cursor: loading || !acceptedTerms || !user ? 'not-allowed' : 'pointer',
+                    opacity: acceptedTerms && user ? 1 : 0.5,
                     fontFamily: 'inherit',
                     transition: 'opacity 0.2s',
                   }}
                 >
-                  {loading === pkg.id ? 'REDIRECTING...' : acceptedTerms ? `BUY ${pkg.coins.toLocaleString()} COINS` : 'ACCEPT TERMS TO BUY'}
+                  {loading === pkg.id ? 'REDIRECTING...' : !user ? 'SIGN IN TO BUY' : acceptedTerms ? `BUY ${pkg.coins.toLocaleString()} COINS` : 'ACCEPT TERMS TO BUY'}
                 </button>
               </div>
             )

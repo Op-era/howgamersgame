@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { getSessionUser } from '@/lib/auth/session'
 import { getStripe, getPackageById } from '@/lib/stripe/client'
 import { COIN_CURRENCY } from '@/lib/coins/packs'
 import { COIN_TERMS_SUMMARY, checkTermsAcceptance } from '@/lib/coins/terms'
@@ -10,15 +10,14 @@ import { COIN_TERMS_SUMMARY, checkTermsAcceptance } from '@/lib/coins/terms'
  * Body: { packageId: string, acceptedTerms: true, termsVersion: string }
  *
  * Creates a Stripe Checkout session for a coin package.
- * User must be authenticated and must have accepted the current coin purchase terms
+ * User must have a session cookie and must have accepted the current coin purchase terms
  * (all sales final, no refunds, no cash value). The acceptance time is stamped here, on the
  * server, and stored in the Checkout Session and PaymentIntent metadata and then on the
  * revenue_events row. Price and coin amount come from the server pack table;
  * nothing price-related is read from the request.
  */
 export async function POST(request: NextRequest) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const user = await getSessionUser()
 
   if (!user) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
