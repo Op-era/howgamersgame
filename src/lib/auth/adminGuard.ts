@@ -1,13 +1,18 @@
-import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
+import { redirect } from "next/navigation";
+import { getSessionUser } from "@/lib/auth/session";
 
-const ADMIN_EMAILS = ['witprod@gmail.com']
+const ADMIN_EMAILS = ["witprod@gmail.com"];
 
+/** Page guard. Rewritten 2026-10-06: HMAC session (Supabase removed). */
 export async function requireAdmin() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user || !ADMIN_EMAILS.includes(user.email ?? '')) {
-    redirect('/')
+  let user: { id: string; email: string } | null = null;
+  try {
+    user = await getSessionUser();
+  } catch {
+    user = null;
   }
-  return user
+  if (!user || !ADMIN_EMAILS.includes(user.email)) {
+    redirect("/");
+  }
+  return user;
 }

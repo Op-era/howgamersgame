@@ -1,13 +1,18 @@
-import { createClient } from '@/lib/supabase/server'
-import { NextResponse } from 'next/server'
+import { NextResponse } from "next/server";
+import { getSessionUser } from "@/lib/auth/session";
 
-const ADMIN_EMAILS = ['witprod@gmail.com']
+const ADMIN_EMAILS = ["witprod@gmail.com"];
 
+/** API route guard. Rewritten 2026-10-06: HMAC session (Supabase removed). */
 export async function checkAdmin() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user || !ADMIN_EMAILS.includes(user.email ?? '')) {
-    return { user: null, error: NextResponse.json({ error: 'Forbidden' }, { status: 403 }) }
+  let user: { id: string; email: string } | null = null;
+  try {
+    user = await getSessionUser();
+  } catch {
+    user = null;
   }
-  return { user, error: null }
+  if (!user || !ADMIN_EMAILS.includes(user.email)) {
+    return { user: null, error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) };
+  }
+  return { user, error: null };
 }
