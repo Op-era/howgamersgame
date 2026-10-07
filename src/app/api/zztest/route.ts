@@ -14,7 +14,9 @@ export async function GET() {
     ]);
     let b = await query("SELECT coin_balance FROM profiles WHERE id=$1", [userId]);
     out.balanceAfterFunding = b.rows[0].coin_balance;
-    const s = await query("SELECT spend_coins($1,$2,$3,$4,$5) AS result", [userId, null, 1, "Neon Snake power-up slowmo", "test-pu-" + ts]);
+    const g = await query("SELECT id FROM games WHERE slug=$1", ["neon-snake"]);
+    const gameId = g.rows[0].id;
+    const s = await query("SELECT spend_coins($1,$2,$3,$4,$5) AS result", [userId, gameId, 1, "Neon Snake power-up slowmo", "test-pu-" + ts]);
     out.spendResult = s.rows[0].result;
     b = await query("SELECT coin_balance FROM profiles WHERE id=$1", [userId]);
     out.balanceAfterSpend = b.rows[0].coin_balance;
