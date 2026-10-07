@@ -1,54 +1,41 @@
-import { notFound } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
-import type { Game } from '@/types/game'
-import PlayClient from './PlayClient'
+import { notFound } from "next/navigation";
+import { query } from "@/lib/db/pg";
+import { getSessionUser } from "@/lib/auth/session";
+import type { Game } from "@/types/game";
+import PlayClient from "./PlayClient";
 
-export const revalidate = 60
+export const revalidate = 60;
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params
+  const { slug } = await params;
   try {
-    const supabase = await createClient()
-    const { data } = await supabase.from('games').select('title, description').eq('slug', slug).single()
-    if (!data) return {}
+    const r = await query("SELECT title, description FROM games WHERE slug = $1", [slug]);
+    const data = r.rows[0] as { title: string; description: string | null } | undefined;
+    if (!data) return {};
     return {
       title: `${data.title} — HowGamersGame`,
       description: data.description ?? undefined,
-    }
+    };
   } catch {
-    return {}
+    return {};
   }
 }
 
 export default async function PlayPage({ params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params
-  const supabase = await createClient()
+  const { slug } = await params;
 
-  const { data } = await supabase
-    .from('games')
-    .select('*')
-    .eq('slug', slug)
-    .eq('is_active', true)
-    .single()
+  const r = await query("SELECT * FROM games WHERE slug = $1 AND is_active = TRUE", [slug]);
+  const game = r.rows[0] as Game | undefined;
+  if (!game) notFound();
 
-  if (!data) notFound()
-
-  const { data: { user } } = await supabase.auth.getUser()
-  let coinBalance = 0
+  const user = await getSessionUser().catch(() => null);
+  let coinBalance = 0;
   if (user) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('coin_balance')
-      .eq('id', user.id)
-      .single()
-    coinBalance = profile?.coin_balance ?? 0
+    const p = await query("SELECT coin_balance FROM profiles WHERE id = $1", [user.id]);
+    const profile = p.rows[0] as { coin_balance: number } | undefined;
+    coinBalance = profile?.coin_balance ?? 0;
   }
 
-  return (
-    <PlayClient
-      game={data as Game}
-      userId={user?.id ?? null}
-      initialCoins={coinBalance}
-    />
-  )
+  return <PlayClient game={game} userId={user?.id ?? null} initialCoins={coinBalance} />;
 }
