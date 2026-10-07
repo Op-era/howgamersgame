@@ -2,40 +2,36 @@
 
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase/client'
-import type { User } from '@supabase/supabase-js'
+
+type SessionUser = { id: string; email: string; coin_balance: number } | null
 
 export default function Navigation() {
-  const [user, setUser] = useState<User | null>(null)
+  const [user, setUser] = useState<SessionUser>(null)
   const [coins, setCoins] = useState<number>(0)
-  const supabase = createClient()
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user)
-      if (data.user) fetchCoins(data.user.id)
-    })
-
-    const { data: listener } = supabase.auth.onAuthStateChange((_, session) => {
-      setUser(session?.user ?? null)
-      if (session?.user) fetchCoins(session.user.id)
-      else setCoins(0)
-    })
-    return () => listener.subscription.unsubscribe()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    fetch('/api/auth/me', { cache: 'no-store' })
+      .then((r) => r.json())
+      .then((d) => {
+        if (d.user) {
+          setUser(d.user)
+          setCoins(d.user.coin_balance ?? 0)
+        } else {
+          setUser(null)
+          setCoins(0)
+        }
+      })
+      .catch(() => {
+        setUser(null)
+        setCoins(0)
+      })
   }, [])
 
-  async function fetchCoins(userId: string) {
-    const { data } = await supabase
-      .from('profiles')
-      .select('coin_balance')
-      .eq('id', userId)
-      .single()
-    if (data) setCoins(data.coin_balance)
-  }
-
   async function signOut() {
-    await supabase.auth.signOut()
+    await fetch('/api/auth/login', { method: 'DELETE' }).catch(() => {})
+    setUser(null)
+    setCoins(0)
+    window.location.href = '/'
   }
 
   return (

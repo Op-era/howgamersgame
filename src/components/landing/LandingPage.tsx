@@ -11,8 +11,9 @@ export default function LandingPage() {
   const [callsign, setCallsign] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [mode, setMode] = useState<'signup' | 'login'>('signup')
 
-  async function handleSignup(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError('')
@@ -31,7 +32,7 @@ export default function LandingPage() {
       })
       const data = await res.json()
       if (!res.ok) {
-        setError(data.error || 'Signup failed. Please try again.')
+        setError(data.error || 'Sign in failed. Please try again.')
       } else {
         router.push('/console')
         router.refresh()
@@ -101,6 +102,31 @@ export default function LandingPage() {
         borderRadius: 12,
         padding: 32,
       }}>
+        {/* Signup / Login tabs */}
+        <div style={{ display: 'flex', marginBottom: 24, borderBottom: '1px solid #1a1a3e' }}>
+          {(['signup', 'login'] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              onClick={() => { setMode(m); setError('') }}
+              style={{
+                flex: 1,
+                padding: '10px 0',
+                background: mode === m ? 'var(--accent-green)' : 'transparent',
+                color: mode === m ? '#000' : 'var(--text-muted)',
+                border: 'none',
+                fontSize: 11,
+                fontWeight: 'bold',
+                letterSpacing: '0.15em',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              {m === 'signup' ? 'SIGN UP' : 'LOG IN'}
+            </button>
+          ))}
+        </div>
+
         <h2 style={{
           fontSize: 18,
           letterSpacing: '0.15em',
@@ -108,7 +134,7 @@ export default function LandingPage() {
           textAlign: 'center',
           color: 'var(--accent-green)',
         }}>
-          INSERT COIN TO START
+          {mode === 'signup' ? 'INSERT COIN TO START' : 'WELCOME BACK, PLAYER'}
         </h2>
         <p style={{
           fontSize: 12,
@@ -116,10 +142,10 @@ export default function LandingPage() {
           textAlign: 'center',
           margin: '0 0 24px',
         }}>
-          Sign up free to enter the console room
+          {mode === 'signup' ? 'Sign up free to enter the console room' : 'Sign in with your email to keep playing'}
         </p>
 
-        <form onSubmit={handleSignup} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <div>
             <label style={{ fontSize: 11, letterSpacing: '0.1em', color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>
               EMAIL
@@ -141,6 +167,7 @@ export default function LandingPage() {
               }}
             />
           </div>
+          {mode === 'signup' && (
           <div>
             <label style={{ fontSize: 11, letterSpacing: '0.1em', color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>
               CALLSIGN (OPTIONAL)
@@ -163,6 +190,7 @@ export default function LandingPage() {
               }}
             />
           </div>
+          )}
 
           {error && (
             <div style={{ color: '#ff5555', fontSize: 12, textAlign: 'center' }}>
@@ -186,7 +214,7 @@ export default function LandingPage() {
               fontFamily: 'inherit',
             }}
           >
-            {loading ? 'POWERING ON...' : '▶ START PLAYING'}
+            {loading ? 'POWERING ON...' : mode === 'signup' ? '▶ START PLAYING' : '▶ LOG IN'}
           </button>
         </form>
 
