@@ -70,9 +70,9 @@ export async function POST(request: NextRequest) {
   }
 
   const r = await query(
-    `INSERT INTO games (slug, title, description, genre, game_url, game_type, cover_art_url,
+    `INSERT INTO games (slug, name, title, description, genre, game_url, game_type, cover_art_url,
                         developer_id, is_active, review_status, submitted_at, terms_accepted_at)
-     VALUES ($1,$2,$3,$4,$5,'external',$6,$7,FALSE,'pending',NOW(),NOW())
+     VALUES ($1,$2,$2,$3,$4,$5,'external',$6,$7,FALSE,'pending',NOW(),NOW())
      RETURNING id, slug, title, review_status`,
     [
       slug,
