@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { query } from "@/lib/db/pg";
-import { getPlayContext } from "../route";
+import { getPlayContext } from "@/lib/playContext";
 import { mapWalletResult } from "@/lib/coins/wallet";
 
 type Params = { params: Promise<{ slug: string }> };
