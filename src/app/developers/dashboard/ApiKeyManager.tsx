@@ -103,7 +103,7 @@ export default function ApiKeyManager({ gameId }: { gameId: string }) {
             {busy ? "GENERATING..." : "+ GENERATE NEW KEY"}
           </button>
           <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 8 }}>
-            Keys let your game server spend and award coins. Keep them secret.
+            Keys let your game server spend coins for plays. Games cannot award coins. Keep them secret.
           </div>
         </div>
       )}
