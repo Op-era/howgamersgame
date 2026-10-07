@@ -12,14 +12,15 @@ export async function POST() {
 
     // Add Chris's Tic Tactical Toe
     await query(
-      `INSERT INTO games (slug, title, description, game_url, game_type, is_active, sort_order, play_count, status)
-       VALUES ($1, $2, $3, $4, $5, TRUE, 1, 0, $6)
+      `INSERT INTO games (slug, name, title, description, game_url, game_type, is_active, sort_order, play_count, status)
+       VALUES ($1, $2, $3, $4, $5, $6, TRUE, 1, 0, $7)
        ON CONFLICT (slug) DO UPDATE SET
          is_active = TRUE,
-         game_url = $4,
+         game_url = $5,
          sort_order = 1`,
       [
         'chris-tic-tactical-toe',
+        "Chris's Tic Tactical Toe",
         "Chris's Tic Tactical Toe",
         'Strategic grid battles with AI opponents. Place and move pieces on a tactical grid.',
         '/games/tic-tactical-toe/index.html',
