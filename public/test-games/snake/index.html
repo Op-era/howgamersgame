@@ -44,8 +44,9 @@
     <canvas id="game" width="400" height="400"></canvas>
     <div id="overlay">
       <h1>NEON SNAKE</h1>
-      <p id="introText">One coin per play.<br>Score <b>50+</b>, <b>100+</b>, <b>200+</b> to earn <b>extra lives</b>.</p>
-      <button id="playBtn">PLAY (1 COIN)</button>
+      <p id="introText">Free to play.<br>Score <b>50+</b>, <b>100+</b>, <b>200+</b> to earn <b>extra lives</b>.<br>Out of lives? Buy one for <b>1</b> coin.</p>
+      <button id="playBtn">PLAY FREE</button>
+      <button id="buyLifeBtn" class="hidden" style="background:#ffd700;">BUY EXTRA LIFE (1 COIN)</button>
       <div id="msg"></div>
     </div>
   </div>
@@ -64,6 +65,7 @@
   var balanceEl = document.getElementById("balance");
   var overlay = document.getElementById("overlay");
   var playBtn = document.getElementById("playBtn");
+  var buyLifeBtn = document.getElementById("buyLifeBtn");
   var msgEl = document.getElementById("msg");
   var introText = document.getElementById("introText");
 
@@ -188,38 +190,50 @@
   function gameOver() {
     alive = false;
     clearInterval(loop);
-    introText.innerHTML = "Game over. Score: <b>" + score + "</b><br>Best: <b>" + best + "</b>";
+    introText.innerHTML = "Game over. Score: <b>" + score + "</b><br>Best: <b>" + best + "</b><br>Continue with an extra life for <b>1</b> coin?";
     msgEl.textContent = "";
     overlay.classList.remove("hidden");
-    playBtn.textContent = "PLAY AGAIN (1 COIN)";
+    playBtn.textContent = "PLAY AGAIN FREE";
     playBtn.disabled = false;
+    buyLifeBtn.classList.remove("hidden");
   }
 
-  playBtn.addEventListener("click", function() {
+  buyLifeBtn.addEventListener("click", function() {
     msgEl.textContent = "";
-    playBtn.disabled = true;
-    playBtn.textContent = "STARTING...";
-    api("/spend", { amount: 1, reason: "Neon Snake play",
-      idempotencyKey: "snake-play-" + Date.now() }).then(function(res) {
+    buyLifeBtn.disabled = true;
+    buyLifeBtn.textContent = "BUYING...";
+    api("/spend", { amount: 1, reason: "Neon Snake extra life",
+      idempotencyKey: "snake-life-" + Date.now() }).then(function(res) {
+      buyLifeBtn.disabled = false;
+      buyLifeBtn.textContent = "BUY EXTRA LIFE (1 COIN)";
       if (!res.ok) {
-        playBtn.disabled = false;
-        playBtn.textContent = "PLAY (1 COIN)";
         msgEl.textContent = res.body && res.body.error === "Insufficient coins"
-          ? "Not enough coins. Grab some in the store to keep playing."
-          : "Could not start: " + ((res.body && res.body.error) || "unknown error");
+          ? "Not enough coins. Grab some in the store for power ups."
+          : "Could not buy life: " + ((res.body && res.body.error) || "unknown error");
         return;
       }
       balanceEl.textContent = res.body.balance;
       notifyParent(res.body.balance);
+      lives = 1; livesEl.textContent = "1";
+      buyLifeBtn.classList.add("hidden");
       overlay.classList.add("hidden");
-      reset();
-      draw();
+      alive = true;
+      respawn();
       restartLoop();
     }).catch(function() {
-      playBtn.disabled = false;
-      playBtn.textContent = "PLAY (1 COIN)";
+      buyLifeBtn.disabled = false;
+      buyLifeBtn.textContent = "BUY EXTRA LIFE (1 COIN)";
       msgEl.textContent = "Network error. Try again.";
     });
+  });
+
+  playBtn.addEventListener("click", function() {
+    msgEl.textContent = "";
+    buyLifeBtn.classList.add("hidden");
+    overlay.classList.add("hidden");
+    reset();
+    draw();
+    restartLoop();
   });
 
   document.addEventListener("keydown", function(e) {
