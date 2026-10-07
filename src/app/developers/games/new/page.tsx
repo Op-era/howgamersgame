@@ -20,14 +20,30 @@ export default function SubmitGamePage() {
   const [genre, setGenre] = useState("");
   const [gameUrl, setGameUrl] = useState("");
   const [coverArt, setCoverArt] = useState("");
+  const [labelFile, setLabelFile] = useState<File | null>(null);
+  const [labelPreview, setLabelPreview] = useState("");
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const router = useRouter();
 
+  function handleLabelChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0] ?? null;
+    setLabelFile(file);
+    if (file) {
+      setLabelPreview(URL.createObjectURL(file));
+    } else {
+      setLabelPreview("");
+    }
+  }
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    if (!labelFile) {
+      setError("Cartridge label art is required (900x1670px minimum).");
+      return;
+    }
     if (!acceptTerms) {
       setError("You must accept the developer terms to submit your game.");
       return;
@@ -46,6 +62,21 @@ export default function SubmitGamePage() {
     if (!res.ok) {
       setError(body.error || "Submission failed");
       return;
+    }
+    const gameId = body.game?.id || body.id;
+    if (gameId && labelFile) {
+      const formData = new FormData();
+      formData.append("label", labelFile);
+      const labelRes = await fetch(`/api/developers/games/${gameId}/label`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!labelRes.ok) {
+        const labelBody = await labelRes.json();
+        setError("Game submitted but label upload failed: " + (labelBody.error || "unknown error"));
+        setBusy(false);
+        return;
+      }
     }
     router.push("/developers/dashboard");
   }
@@ -85,6 +116,23 @@ export default function SubmitGamePage() {
         <div>
           <label style={labelStyle}>COVER ART URL (OPTIONAL)</label>
           <input style={inputStyle} value={coverArt} onChange={(e) => setCoverArt(e.target.value)} placeholder="https://..." />
+        </div>
+
+        <div>
+          <label style={labelStyle}>CARTRIDGE LABEL ART (REQUIRED)</label>
+          <input
+            type="file"
+            accept="image/png,image/jpeg"
+            onChange={handleLabelChange}
+            required
+            style={{ ...inputStyle, padding: "10px 14px" }}
+          />
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 6 }}>
+            Portrait PNG or JPG, at least 900x1670px. This art appears on your game&apos;s cartridge.
+          </div>
+          {labelPreview && (
+            <img src={labelPreview} alt="Label preview" style={{ maxWidth: 120, marginTop: 10, borderRadius: 4 }} />
+          )}
         </div>
 
         <div style={{ background: "#0d0d1a", border: "1px solid #1a1a3e", borderRadius: 8, padding: 20 }}>
