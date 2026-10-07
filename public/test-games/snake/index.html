@@ -37,13 +37,14 @@
   <div id="hud">
     <div><div class="label">SCORE</div><div class="value" id="score">0</div></div>
     <div><div class="label">BEST</div><div class="value" id="best">0</div></div>
+    <div><div class="label">LIVES</div><div class="value" id="lives">1</div></div>
     <div><div class="label">COINS</div><div id="balance">...</div></div>
   </div>
   <div id="stage">
     <canvas id="game" width="400" height="400"></canvas>
     <div id="overlay">
       <h1>NEON SNAKE</h1>
-      <p id="introText">One coin per play.<br>Score <b>50+</b> to win <b>2</b> coins. <b>100+</b> wins <b>5</b>. <b>200+</b> wins <b>10</b>.</p>
+      <p id="introText">One coin per play.<br>Score <b>50+</b>, <b>100+</b>, <b>200+</b> to earn <b>extra lives</b>.</p>
       <button id="playBtn">PLAY (1 COIN)</button>
       <div id="msg"></div>
     </div>
@@ -67,7 +68,10 @@
   var introText = document.getElementById("introText");
 
   var GRID = 20, CELL = 20;
-  var snake, dir, nextDir, food, score, best, alive, loop, speed;
+  var snake, dir, nextDir, food, score, best, alive, loop, speed, lives;
+  var livesEl = document.getElementById("lives");
+  var lifeMilestones = [50, 100, 200];
+  var milestonesHit = {};
 
   best = parseInt(localStorage.getItem("neonSnakeBest") || "0", 10);
   bestEl.textContent = best;
@@ -102,7 +106,29 @@
     dir = {x:1,y:0}; nextDir = {x:1,y:0};
     score = 0; scoreEl.textContent = "0";
     speed = 140; alive = true;
+    lives = 1; livesEl.textContent = "1";
+    milestonesHit = {};
     placeFood();
+  }
+
+  function respawn() {
+    snake = [{x:10,y:10},{x:9,y:10},{x:8,y:10}];
+    dir = {x:1,y:0}; nextDir = {x:1,y:0};
+    speed = 140;
+    placeFood();
+    draw();
+  }
+
+  function checkLifeMilestones() {
+    for (var i = 0; i < lifeMilestones.length; i++) {
+      var m = lifeMilestones[i];
+      if (score >= m && !milestonesHit[m]) {
+        milestonesHit[m] = true;
+        lives += 1; livesEl.textContent = String(lives);
+        msgEl.textContent = "Extra life earned at " + m + " points.";
+        setTimeout(function(){ msgEl.textContent = ""; }, 2500);
+      }
+    }
   }
 
   function placeFood() {
@@ -119,6 +145,13 @@
     var head = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
     if (head.x < 0 || head.y < 0 || head.x >= GRID || head.y >= GRID ||
         snake.some(function(s){ return s.x===head.x && s.y===head.y; })) {
+      if (lives > 1) {
+        lives -= 1; livesEl.textContent = String(lives);
+        msgEl.textContent = "Life lost. " + lives + " remaining.";
+        setTimeout(function(){ if (alive) msgEl.textContent = ""; }, 2500);
+        respawn();
+        return;
+      }
       return gameOver();
     }
     snake.unshift(head);
@@ -127,6 +160,7 @@
       if (score > best) { best = score; bestEl.textContent = best;
         localStorage.setItem("neonSnakeBest", String(best)); }
       if (speed > 70) { speed -= 4; restartLoop(); }
+      checkLifeMilestones();
       placeFood();
     } else {
       snake.pop();
@@ -151,41 +185,14 @@
     ctx.shadowBlur = 0;
   }
 
-  function rewardFor(s) {
-    if (s >= 200) return 10;
-    if (s >= 100) return 5;
-    if (s >= 50) return 2;
-    return 0;
-  }
-
   function gameOver() {
     alive = false;
     clearInterval(loop);
-    var reward = rewardFor(score);
-    var done = function() {
-      overlay.classList.remove("hidden");
-      playBtn.textContent = "PLAY AGAIN (1 COIN)";
-      playBtn.disabled = false;
-    };
-    if (reward > 0) {
-      introText.innerHTML = "Game over. Score: <b>" + score + "</b><br>Claiming your <b>" + reward + "</b> coin reward...";
-      api("/award", { amount: reward, reason: "Neon Snake score " + score,
-        idempotencyKey: "snake-" + Date.now() + "-" + score }).then(function(res) {
-        if (res.ok && typeof res.body.balance === "number") {
-          balanceEl.textContent = res.body.balance;
-          notifyParent(res.body.balance);
-          introText.innerHTML = "Game over. Score: <b>" + score + "</b><br>You won <b>" + reward + "</b> coins.";
-        } else {
-          introText.innerHTML = "Game over. Score: <b>" + score + "</b><br>Reward claim had an issue. Score still counts.";
-        }
-        msgEl.textContent = "";
-        done();
-      });
-    } else {
-      introText.innerHTML = "Game over. Score: <b>" + score + "</b><br>Score <b>50+</b> to win coins.";
-      msgEl.textContent = "";
-      done();
-    }
+    introText.innerHTML = "Game over. Score: <b>" + score + "</b><br>Best: <b>" + best + "</b>";
+    msgEl.textContent = "";
+    overlay.classList.remove("hidden");
+    playBtn.textContent = "PLAY AGAIN (1 COIN)";
+    playBtn.disabled = false;
   }
 
   playBtn.addEventListener("click", function() {
