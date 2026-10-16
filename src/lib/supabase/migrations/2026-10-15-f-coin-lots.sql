@@ -565,7 +565,7 @@ BEGIN
   VALUES
     (p_revenue_event_id, p_kind, p_amount_cents, p_external_ref, p_note);
 
-  v_void := LEAST(p_void_coins, v_lot.coins_remaining);
+  v_void := CASE WHEN v_lot.user_id IS NULL THEN 0 ELSE LEAST(p_void_coins, v_lot.coins_remaining) END;
   IF v_void > 0 THEN
     UPDATE coin_lots
        SET coins_remaining = coins_remaining - v_void
@@ -644,7 +644,7 @@ BEGIN
     ),
     lot_nets AS (
       SELECT l.id,
-             GREATEST(l.gross_cents - COALESCE(SUM(d.amount_cents), 0), 0) AS net_cents
+             GREATEST(l.gross_cents - COALESCE(SUM(d.amount_cents), 0), 0)::INTEGER AS net_cents
         FROM coin_lots l
         LEFT JOIN purchase_deductions d ON d.revenue_event_id = l.revenue_event_id
        GROUP BY l.id, l.gross_cents
@@ -655,7 +655,7 @@ BEGIN
            COALESCE(SUM(a.value_cents) FILTER (WHERE a.source = 'paid'), 0) AS gross_value,
            COALESCE(SUM(
              CASE WHEN a.source = 'paid' THEN
-               coin_value_slice(a.coins_total, ln.net_cents, a.coins_offset, a.coins)
+               coin_value_slice(a.coins_total, ln.net_cents::INTEGER, a.coins_offset, a.coins)
              ELSE 0 END
            ), 0) AS net_value
       FROM allocs a
@@ -714,10 +714,6 @@ DO $$
 DECLARE
   v_lot_count     INTEGER := 0;
   v_profile_count INTEGER := 0;
-  v_lot_id        UUID;
-  v_lot_user_id   UUID;
-  v_lot_remaining INTEGER;
-  v_take          INTEGER;
 BEGIN
   IF EXISTS (SELECT 1 FROM wallet_migration_state WHERE name = 'coin_lots_backfill_v1') THEN
     RETURN;
@@ -746,53 +742,45 @@ BEGIN
   )
   SELECT COUNT(*) INTO v_lot_count FROM new_lots;
 
-  -- Split each existing balance: paid_remaining = LEAST(coin_balance, total
-  -- coins credited by that user's coin_purchase revenue_events);
-  -- promo_balance = coin_balance - paid_remaining.
-  WITH totals AS (
-    SELECT re.user_id,
-           SUM(re.coins_credited)::BIGINT AS total_credited
-      FROM revenue_events re
-     WHERE re.event_type = 'coin_purchase'
-       AND re.user_id IS NOT NULL
-     GROUP BY re.user_id
-  ),
-  updated AS (
-    UPDATE profiles p
-       SET promo_balance = GREATEST(p.coin_balance - LEAST(p.coin_balance::BIGINT, t.total_credited)::INTEGER, 0)
-      FROM totals t
-     WHERE t.user_id = p.id
-       AND p.coin_balance > LEAST(p.coin_balance::BIGINT, t.total_credited)::INTEGER
-    RETURNING p.id
-  )
-  SELECT COUNT(*) INTO v_profile_count FROM updated;
-
-  -- Remove coins_credited - paid_remaining from each user's lots oldest first,
-  -- so remaining lots = paid_remaining.
-  FOR v_lot_id, v_lot_user_id, v_lot_remaining IN
-    SELECT l.id,
-           l.user_id,
-           l.coins_remaining
+  -- Fix lots: to_remove = credited - LEAST(balance, credited) is taken from
+  -- the user's lots oldest first.
+  WITH per_user AS (
+    SELECT l.user_id,
+           SUM(l.coins_total)::BIGINT AS credited
       FROM coin_lots l
+     WHERE l.user_id IS NOT NULL
+     GROUP BY l.user_id
+  ),
+  plan AS (
+    SELECT l.id,
+           l.coins_total,
+           GREATEST(0, LEAST(l.coins_total::BIGINT,
+             (pu.credited - LEAST(p.coin_balance::BIGINT, pu.credited))
+             - COALESCE(SUM(l.coins_total) OVER (
+                 PARTITION BY l.user_id
+                 ORDER BY l.purchased_at, l.id
+                 ROWS BETWEEN UNBOUNDED PRECEDING AND 1 PRECEDING
+               ), 0)))::INTEGER AS consumed
+      FROM coin_lots l
+      JOIN per_user pu ON pu.user_id = l.user_id
       JOIN profiles p ON p.id = l.user_id
-     WHERE l.coins_remaining > 0
-       AND p.promo_balance > 0
-     ORDER BY l.user_id, l.purchased_at ASC, l.id ASC
-     FOR UPDATE OF l
-  LOOP
-    SELECT LEAST(v_lot_remaining, p.promo_balance) INTO v_take
-      FROM profiles p WHERE p.id = v_lot_user_id;
+  )
+  UPDATE coin_lots c
+     SET coins_remaining = pl.coins_total - pl.consumed
+    FROM plan pl
+   WHERE pl.id = c.id;
 
-    IF v_take > 0 THEN
-      UPDATE coin_lots
-         SET coins_remaining = coins_remaining - v_take
-       WHERE id = v_lot_id;
+  UPDATE coin_lots
+     SET coins_remaining = 0
+   WHERE user_id IS NULL;
 
-      UPDATE profiles
-         SET promo_balance = promo_balance - v_take
-       WHERE id = v_lot_user_id;
-    END IF;
-  END LOOP;
+  -- Set promo_balance for ALL profiles (including users with no purchases).
+  UPDATE profiles p
+     SET promo_balance = p.coin_balance - COALESCE(
+           (SELECT SUM(l.coins_remaining) FROM coin_lots l WHERE l.user_id = p.id),
+           0
+         );
+  GET DIAGNOSTICS v_profile_count = ROW_COUNT;
 
   INSERT INTO wallet_migration_state (name) VALUES ('coin_lots_backfill_v1');
 
