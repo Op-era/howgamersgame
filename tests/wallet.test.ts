@@ -22,11 +22,11 @@ test('parse: rejects bad user ids and amounts', () => {
   for (const b of bad) assert.equal(parseWalletRequest('spend', b, null).ok, false, JSON.stringify(b))
 })
 
-test('parse: award cap is 10,000, spend cap is 1,000,000', () => {
+test('parse: award cap is 1,000, spend cap is 1,000,000', () => {
   assert.ok(parseWalletRequest('award', { userId: U, amount: MAX_AWARD_PER_CALL }, null).ok)
   const over = parseWalletRequest('award', { userId: U, amount: MAX_AWARD_PER_CALL + 1 }, null)
   assert.equal(over.ok, false)
-  if (!over.ok) assert.match(over.error, /Max award per call is 10000/)
+  if (!over.ok) assert.match(over.error, /Max award per call is 1000/)
   assert.ok(parseWalletRequest('spend', { userId: U, amount: 20_000 }, null).ok)
   assert.equal(parseWalletRequest('spend', { userId: U, amount: 1_000_001 }, null).ok, false)
 })

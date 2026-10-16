@@ -6,7 +6,7 @@ set -e
 Q="$PSQL -q -At"
 G=77777777-7777-4777-8777-777777777777
 $Q -c "insert into games(id,slug,title,game_url) values ('$G','conc-$$','C','https://c.test')"
-newuser() { U=$(uuidgen | tr A-Z a-z); $Q -c "insert into auth.users(id,email) values ('$U','$U@t.invalid')"; $Q -c "update profiles set coin_balance=$1 where id='$U'"; }
+newuser() { U=$(uuidgen | tr A-Z a-z); $Q -c "insert into auth.users(id,email) values ('$U','$U@t.invalid')"; $Q -c "update profiles set coin_balance=$1, promo_balance=$1 where id='$U'"; if [ "$1" -gt 0 ]; then $Q -c "insert into promo_grants(user_id,coins_granted,coins_remaining,granted_at,expires_at,source) values ('$U',$1,$1,now(),now()+interval '720 hours','award')"; fi; }
 fail() { echo "FAIL: $1"; exit 1; }
 count() { cat /tmp/sac_$$_$1_*.out 2>/dev/null | grep -c "\"$2\"" || true; }
 

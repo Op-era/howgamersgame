@@ -48,16 +48,16 @@
     <canvas id="game" width="400" height="400"></canvas>
     <div id="overlay">
       <h1>NEON SNAKE</h1>
-      <p id="introText">Free to play.<br>Score <b>50+</b>, <b>100+</b>, <b>200+</b> to earn <b>extra lives</b>.<br>Power ups below cost <b>1</b> coin each.</p>
+      <p id="introText">Free to play.<br>Score <b>50+</b>, <b>100+</b>, <b>200+</b> to earn <b>extra lives</b>.<br>Power ups below cost <b>50</b> coins each.</p>
       <button id="playBtn">PLAY FREE</button>
-      <button id="buyLifeBtn" class="hidden" style="background:#ffd700;">BUY EXTRA LIFE (1 COIN)</button>
+      <button id="buyLifeBtn" class="hidden" style="background:#ffd700;">BUY EXTRA LIFE (50 COINS)</button>
       <div id="msg"></div>
     </div>
   </div>
   <div id="powerups">
-    <button id="puSlow" title="Slow motion for 10 seconds">SLOW MO<br>1 COIN</button>
-    <button id="puLine" title="3 apples lined up ahead">APPLE LINE<br>1 COIN</button>
-    <button id="puChill" title="Slow down for the next 3 apples">CHILL OUT<br>1 COIN</button>
+    <button id="puSlow" title="Slow motion for 10 seconds">SLOW MO<br>50 COINS</button>
+    <button id="puLine" title="3 apples lined up ahead">APPLE LINE<br>50 COINS</button>
+    <button id="puChill" title="Slow down for the next 3 apples">CHILL OUT<br>50 COINS</button>
   </div>
   <p style="margin-top:10px;font-size:11px;color:#555;">Arrows or WASD to steer. Swipe on touch screens.</p>
 </div>
@@ -246,7 +246,7 @@
   function gameOver() {
     alive = false;
     clearInterval(loop);
-    introText.innerHTML = "Game over. Score: <b>" + score + "</b><br>Best: <b>" + best + "</b><br>Continue with an extra life for <b>1</b> coin?";
+    introText.innerHTML = "Game over. Score: <b>" + score + "</b><br>Best: <b>" + best + "</b><br>Continue with an extra life for <b>50</b> coins?";
     msgEl.textContent = "";
     overlay.classList.remove("hidden");
     playBtn.textContent = "PLAY AGAIN FREE";
@@ -258,10 +258,10 @@
     msgEl.textContent = "";
     buyLifeBtn.disabled = true;
     buyLifeBtn.textContent = "BUYING...";
-    api("/spend", { amount: 1, reason: "Neon Snake extra life",
+    api("/spend", { amount: 50, reason: "Neon Snake extra life",
       idempotencyKey: "snake-life-" + Date.now() }).then(function(res) {
       buyLifeBtn.disabled = false;
-      buyLifeBtn.textContent = "BUY EXTRA LIFE (1 COIN)";
+      buyLifeBtn.textContent = "BUY EXTRA LIFE (50 COINS)";
       if (!res.ok) {
         msgEl.textContent = res.body && res.body.error === "Insufficient coins"
           ? "Not enough coins. Grab some in the store for power ups."
@@ -278,7 +278,7 @@
       restartLoop();
     }).catch(function() {
       buyLifeBtn.disabled = false;
-      buyLifeBtn.textContent = "BUY EXTRA LIFE (1 COIN)";
+      buyLifeBtn.textContent = "BUY EXTRA LIFE (50 COINS)";
       msgEl.textContent = "Network error. Try again.";
     });
   });
@@ -297,7 +297,7 @@
     btn.disabled = true;
     var label = btn.innerHTML;
     btn.textContent = "...";
-    api("/spend", { amount: 1, reason: "Neon Snake power-up " + kind,
+    api("/spend", { amount: 50, reason: "Neon Snake power-up " + kind,
       idempotencyKey: "snake-pu-" + kind + "-" + Date.now() }).then(function(res) {
       btn.disabled = false;
       btn.innerHTML = label;

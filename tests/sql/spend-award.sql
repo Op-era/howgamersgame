@@ -7,7 +7,8 @@ INSERT INTO auth.users (id, email) VALUES
 INSERT INTO games (id, slug, title, game_url) VALUES
   ('99999999-9999-4999-8999-999999999999', 'g1', 'G1', 'https://g1.test'),
   ('88888888-8888-4888-8888-888888888888', 'g2', 'G2', 'https://g2.test');
-UPDATE profiles SET coin_balance = 100 WHERE id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+UPDATE profiles SET coin_balance = 100, promo_balance = 100 WHERE id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+INSERT INTO promo_grants (user_id, coins_granted, coins_remaining, granted_at, expires_at, source) VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 100, 100, NOW(), NOW() + INTERVAL '720 hours', 'award');
 
 DO $$
 DECLARE
@@ -58,8 +59,8 @@ BEGIN
   ASSERT r->>'status' = 'ok', 'spend with award key: ' || r;
   BEGIN PERFORM award_coins(u1, g1, 51, 'x', 'k-award-1'); ASSERT false; EXCEPTION WHEN raise_exception THEN ASSERT SQLERRM = 'idempotency_key_conflict'; END;
   -- caps
-  BEGIN PERFORM award_coins(u1, g1, 10001, 'x', NULL); ASSERT false; EXCEPTION WHEN raise_exception THEN ASSERT SQLERRM = 'invalid_amount'; END;
-  r := award_coins(u1, g1, 10000, 'max', NULL);
+  BEGIN PERFORM award_coins(u1, g1, 1001, 'x', NULL); ASSERT false; EXCEPTION WHEN raise_exception THEN ASSERT SQLERRM = 'invalid_amount'; END;
+  r := award_coins(u1, g1, 1000, 'max', NULL);
   ASSERT r->>'status' = 'ok', 'max award';
   BEGIN PERFORM award_coins(u1, g1, 0, 'x', NULL); ASSERT false; EXCEPTION WHEN raise_exception THEN ASSERT SQLERRM = 'invalid_amount'; END;
   BEGIN PERFORM award_coins('cccccccc-cccc-4ccc-8ccc-cccccccccccc', g1, 5, 'x', NULL); ASSERT false; EXCEPTION WHEN raise_exception THEN ASSERT SQLERRM = 'user_not_found'; END;
