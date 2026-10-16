@@ -19,23 +19,24 @@ $Q -c "update coin_lots set purchased_at = now() - interval '1 day' where revenu
 $Q -c "select award_coins('$A','$G',100,'p','ccl-award-$$')" >/dev/null
 for i in $(seq 1 100); do $Q -c "select spend_coins('$A','$G',20,'p','ccl_a_$i')" > /tmp/ccl_$$_a_$i.out 2>&1 & done; wait
 ok=$(count a ok); ins=$(count a insufficient); bal=$($Q -c "select coin_balance from profiles where id='$A'"); pbal=$($Q -c "select promo_balance from profiles where id='$A'")
-[ "$ok" = 92 ] && [ "$ins" = 8 ] && [ "$bal" = 10 ] && [ "$pbal" = 0 ] || fail "order-under-contention ok=$ok insufficient=$ins balance=$bal promo=$pbal"
+[ "$ok" = 92 ] && [ "$ins" = 8 ] && [ "$bal" = 10 ] && [ "$pbal" = 10 ] || fail "order-under-contention ok=$ok insufficient=$ins balance=$bal promo=$pbal"
 wcr=$($Q -c "select count(*) from wallet_consistency_report() where user_id='$A'"); [ "$wcr" = 0 ] || fail "wallet_consistency_report rows=$wcr"
 promo_coins=$($Q -c "select coalesce(sum(coins),0) from coin_spend_allocations where user_id='$A' and source='promo'")
 paid_coins=$($Q -c "select coalesce(sum(coins),0) from coin_spend_allocations where user_id='$A' and source='paid'")
 paid_cents=$($Q -c "select coalesce(sum(value_cents),0) from coin_spend_allocations where user_id='$A' and source='paid'")
-[ "$promo_coins" = 100 ] && [ "$paid_coins" = 1740 ] && [ "$paid_cents" = 1491 ] || fail "allocations promo=$promo_coins paid=$paid_coins paid_cents=$paid_cents"
+[ "$promo_coins" = 90 ] && [ "$paid_coins" = 1750 ] && [ "$paid_cents" = 1500 ] || fail "allocations promo=$promo_coins paid=$paid_coins paid_cents=$paid_cents"
 lot1=$($Q -c "select id from coin_lots where user_id='$A' and revenue_event_id=(select id from revenue_events where stripe_event_id='evt_ccl_a1_$$')")
 lot2=$($Q -c "select id from coin_lots where user_id='$A' and revenue_event_id=(select id from revenue_events where stripe_event_id='evt_ccl_a2_$$')")
 lot1_rem=$($Q -c "select coins_remaining from coin_lots where id='$lot1'"); lot2_rem=$($Q -c "select coins_remaining from coin_lots where id='$lot2'")
-[ "$lot1_rem" = 0 ] && [ "$lot2_rem" = 10 ] || fail "lot remaining lot1=$lot1_rem lot2=$lot2_rem"
+[ "$lot1_rem" = 0 ] && [ "$lot2_rem" = 0 ] || fail "lot remaining lot1=$lot1_rem lot2=$lot2_rem"
 overlap=$($Q -c "select count(*) from coin_spend_allocations a join coin_spend_allocations b on a.lot_id=b.lot_id and a.id<>b.id and a.lot_id='$lot1' and a.coins_offset < b.coins_offset + b.coins and b.coins_offset < a.coins_offset + a.coins")
 [ "$overlap" = 0 ] || fail "overlapping lot1 allocations=$overlap"
 lot1_alloc=$($Q -c "select coalesce(sum(coins),0) from coin_spend_allocations where lot_id='$lot1'")
 lot2_alloc=$($Q -c "select coalesce(sum(coins),0) from coin_spend_allocations where lot_id='$lot2'")
 lot1_total=$($Q -c "select coins_total from coin_lots where id='$lot1'"); lot2_total=$($Q -c "select coins_total from coin_lots where id='$lot2'")
 [ "$lot1_alloc" = $((lot1_total - lot1_rem)) ] && [ "$lot2_alloc" = $((lot2_total - lot2_rem)) ] || fail "lot allocation totals lot1=$lot1_alloc/$lot1_total lot2=$lot2_alloc/$lot2_total"
-echo "PASS: 100 parallel spends -> 92 applied, 8 insufficient, balance 10, promo 0, allocations consistent"
+nogrant=$($Q -c "select count(*) from coin_spend_allocations where user_id='$A' and source='promo' and promo_grant_id is null"); [ "$nogrant" = 0 ] || fail "promo allocations without grant id=$nogrant"
+echo "PASS: 100 parallel spends -> 92 applied, 8 insufficient, balance 10, promo 10, paid first, allocations consistent"
 
 # 2. DUPLICATE DEDUCTIONS
 for i in $(seq 1 12); do $Q -c "select record_purchase_deduction((select revenue_event_id from coin_lots where id='$lot1'),'tax',40,'tax-par-$$')" > /tmp/ccl_$$_b_$i.out 2>&1 & done; wait
