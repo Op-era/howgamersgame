@@ -217,7 +217,7 @@ GRANT EXECUTE ON FUNCTION award_coins(UUID, UUID, INTEGER, TEXT, TEXT) TO servic
 -- ============================================================
 CREATE OR REPLACE FUNCTION grant_starter_coins(
   p_user_id UUID,
-  p_amount  INTEGER DEFAULT 3
+  p_amount  INTEGER DEFAULT 150
 ) RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
