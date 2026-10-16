@@ -8,7 +8,10 @@ import {
   developerShareCents,
   developerEarnings,
   type LotInput,
+  type PromoGrantInput,
 } from '../src/lib/coins/lots.ts'
+
+const FAR = '2999-01-01T00:00:00Z'
 
 test('coinValueSlice: exact hand-computed values', () => {
   assert.equal(coinValueSlice(550, 500, 0, 550), 500)
@@ -49,9 +52,9 @@ test('coinValueSlice: no drift when slicing one coin at a time', () => {
   assert.equal(partial, 909)
 })
 
-test('allocateSpend: promo first, then lots by purchasedAt and id', () => {
+test('allocateSpend: paid lots first (oldest first), then promo soonest-expiring', () => {
   const lot1: LotInput = {
-    id: 'lot-b',
+    id: 'lot-a',
     purchasedAt: new Date(Date.now() - 3 * 86400000).toISOString(),
     coinsTotal: 550,
     coinsRemaining: 550,
@@ -59,59 +62,148 @@ test('allocateSpend: promo first, then lots by purchasedAt and id', () => {
     grossCents: 500,
   }
   const lot2: LotInput = {
-    id: 'lot-a',
+    id: 'lot-b',
     purchasedAt: new Date(Date.now() - 2 * 86400000).toISOString(),
     coinsTotal: 1200,
     coinsRemaining: 1200,
     coinsVoided: 0,
     grossCents: 1000,
   }
+  const pgA: PromoGrantInput = { id: 'pg-a', coinsRemaining: 100, expiresAt: '2999-01-02T00:00:00Z' }
+  const pgB: PromoGrantInput = { id: 'pg-b', coinsRemaining: 50, expiresAt: '2999-01-01T00:00:00Z' }
 
-  const r1 = allocateSpend({ promoBalance: 100, lots: [lot1, lot2], amount: 60 })
+  const r1 = allocateSpend({ promoGrants: [pgA, pgB], lots: [lot1, lot2], amount: 600 })
   assert.equal(r1.status, 'ok')
   if (r1.status === 'ok') {
-    assert.equal(r1.promoSpent, 60)
-    assert.equal(r1.paidSpent, 0)
-    assert.deepEqual(r1.allocations, [{ source: 'promo', lotId: null, coins: 60, coinsOffset: null, valueCents: 0 }])
+    assert.equal(r1.paidSpent, 600)
+    assert.equal(r1.promoSpent, 0)
+    assert.deepEqual(r1.allocations, [
+      { source: 'paid', lotId: 'lot-a', promoGrantId: null, coins: 550, coinsOffset: 0, valueCents: 500 },
+      { source: 'paid', lotId: 'lot-b', promoGrantId: null, coins: 50, coinsOffset: 0, valueCents: 41 },
+    ])
   }
 
-  const r2 = allocateSpend({ promoBalance: 40, lots: r1.status === 'ok' ? r1.lots : [lot1, lot2], amount: 100 })
+  const r2 = allocateSpend({
+    promoGrants: r1.status === 'ok' ? r1.promoGrants : [pgA, pgB],
+    lots: r1.status === 'ok' ? r1.lots : [lot1, lot2],
+    amount: 1200,
+  })
   assert.equal(r2.status, 'ok')
   if (r2.status === 'ok') {
-    assert.equal(r2.promoSpent, 40)
-    assert.equal(r2.paidSpent, 60)
-    assert.deepEqual(r2.allocations[0], { source: 'promo', lotId: null, coins: 40, coinsOffset: null, valueCents: 0 })
-    assert.deepEqual(r2.allocations[1], { source: 'paid', lotId: 'lot-b', coins: 60, coinsOffset: 0, valueCents: 54 })
-    assert.equal(r2.lots.find((l) => l.id === 'lot-b')?.coinsRemaining, 490)
+    assert.equal(r2.paidSpent, 1150)
+    assert.equal(r2.promoSpent, 50)
+    assert.deepEqual(r2.allocations, [
+      { source: 'paid', lotId: 'lot-b', promoGrantId: null, coins: 1150, coinsOffset: 50, valueCents: 959 },
+      { source: 'promo', lotId: null, promoGrantId: 'pg-b', coins: 50, coinsOffset: null, valueCents: 0 },
+    ])
   }
 
-  const r3 = allocateSpend({ promoBalance: 0, lots: r2.status === 'ok' ? r2.lots : [lot1, lot2], amount: 600 })
+  const r3 = allocateSpend({
+    promoGrants: r2.status === 'ok' ? r2.promoGrants : [pgA, pgB],
+    lots: r2.status === 'ok' ? r2.lots : [lot1, lot2],
+    amount: 100,
+  })
   assert.equal(r3.status, 'ok')
   if (r3.status === 'ok') {
-    assert.deepEqual(r3.allocations[0], { source: 'paid', lotId: 'lot-b', coins: 490, coinsOffset: 60, valueCents: 446 })
-    assert.deepEqual(r3.allocations[1], { source: 'paid', lotId: 'lot-a', coins: 110, coinsOffset: 0, valueCents: 91 })
-    assert.equal(r3.allocations[0].valueCents + r3.allocations[1].valueCents, 537)
+    assert.equal(r3.paidSpent, 0)
+    assert.equal(r3.promoSpent, 100)
+    assert.deepEqual(r3.allocations, [
+      { source: 'promo', lotId: null, promoGrantId: 'pg-a', coins: 100, coinsOffset: null, valueCents: 0 },
+    ])
   }
-
-  // lot1 total value across r2 and r3 is 54 + 446 = 500
-  assert.equal(54 + 446, 500)
-
-  // reverse array order still spends lot1 first
-  const r4 = allocateSpend({ promoBalance: 0, lots: [lot2, lot1], amount: 10 })
-  assert.equal(r4.status, 'ok')
-  if (r4.status === 'ok') assert.equal(r4.allocations[0].lotId, 'lot-b')
-
-  // same purchasedAt ties broken by id
-  const sameTime = new Date().toISOString()
-  const tieA: LotInput = { id: 'z-lot', purchasedAt: sameTime, coinsTotal: 100, coinsRemaining: 100, coinsVoided: 0, grossCents: 100 }
-  const tieB: LotInput = { id: 'a-lot', purchasedAt: sameTime, coinsTotal: 100, coinsRemaining: 100, coinsVoided: 0, grossCents: 100 }
-  const r5 = allocateSpend({ promoBalance: 0, lots: [tieA, tieB], amount: 10 })
-  assert.equal(r5.status, 'ok')
-  if (r5.status === 'ok') assert.equal(r5.allocations[0].lotId, 'a-lot')
 
   // input objects are not mutated
   assert.equal(lot1.coinsRemaining, 550)
   assert.equal(lot2.coinsRemaining, 1200)
+  assert.equal(pgA.coinsRemaining, 100)
+  assert.equal(pgB.coinsRemaining, 50)
+})
+
+test('allocateSpend: expired grants are ignored', () => {
+  const expired: PromoGrantInput = { id: 'pg-expired', coinsRemaining: 100, expiresAt: '2000-01-01T00:00:00Z' }
+  const active: PromoGrantInput = { id: 'pg-active', coinsRemaining: 10, expiresAt: FAR }
+  const now = '2026-01-01T00:00:00Z'
+
+  const r1 = allocateSpend({ promoGrants: [expired, active], lots: [], amount: 5, now })
+  assert.equal(r1.status, 'ok')
+  if (r1.status === 'ok') {
+    assert.equal(r1.promoSpent, 5)
+    assert.equal(r1.paidSpent, 0)
+    assert.deepEqual(r1.allocations, [
+      { source: 'promo', lotId: null, promoGrantId: 'pg-active', coins: 5, coinsOffset: null, valueCents: 0 },
+    ])
+  }
+
+  const r2 = allocateSpend({ promoGrants: [expired, active], lots: [], amount: 11, now })
+  assert.deepEqual(r2, { status: 'insufficient' })
+})
+
+test('worked example: 100 paid + 30 promo, spend 50, old order vs new order', () => {
+  const lot: LotInput = {
+    id: 'lot-w',
+    purchasedAt: '2026-01-01T00:00:00Z',
+    coinsTotal: 100,
+    coinsRemaining: 100,
+    coinsVoided: 0,
+    grossCents: 200,
+  }
+  const grant: PromoGrantInput = { id: 'pg-w', coinsRemaining: 30, expiresAt: FAR }
+
+  const newOrder = allocateSpend({ promoGrants: [grant], lots: [lot], amount: 50 })
+  assert.equal(newOrder.status, 'ok')
+  if (newOrder.status !== 'ok') return
+  assert.equal(newOrder.paidSpent, 50)
+  assert.equal(newOrder.promoSpent, 0)
+  assert.deepEqual(newOrder.allocations, [
+    { source: 'paid', lotId: 'lot-w', promoGrantId: null, coins: 50, coinsOffset: 0, valueCents: 100 },
+  ])
+  const newEarnings = developerEarnings([
+    {
+      gameId: 'gw',
+      allocation: newOrder.allocations[0],
+      lot,
+      deductions: [],
+    },
+  ])
+  assert.deepEqual(newEarnings, [
+    {
+      gameId: 'gw',
+      paidCoinsSpent: 50,
+      promoCoinsSpent: 0,
+      grossPaidValueCents: 100,
+      netPaidValueCents: 100,
+      developerShareCents: 65,
+    },
+  ])
+
+  const oldOrderAllocations = [
+    { source: 'promo' as const, lotId: null, promoGrantId: 'pg-w', coins: 30, coinsOffset: null, valueCents: 0 },
+    { source: 'paid' as const, lotId: 'lot-w', promoGrantId: null, coins: 20, coinsOffset: 0, valueCents: 40 },
+  ]
+  const oldEarnings = developerEarnings([
+    {
+      gameId: 'gw',
+      allocation: oldOrderAllocations[0],
+      lot: null,
+      deductions: [],
+    },
+    {
+      gameId: 'gw',
+      allocation: oldOrderAllocations[1],
+      lot,
+      deductions: [],
+    },
+  ])
+  assert.deepEqual(oldEarnings, [
+    {
+      gameId: 'gw',
+      paidCoinsSpent: 20,
+      promoCoinsSpent: 30,
+      grossPaidValueCents: 40,
+      netPaidValueCents: 40,
+      developerShareCents: 26,
+    },
+  ])
 })
 
 test('allocateSpend: insufficient and invalid amounts', () => {
@@ -123,13 +215,17 @@ test('allocateSpend: insufficient and invalid amounts', () => {
     coinsVoided: 0,
     grossCents: 100,
   }
-  assert.deepEqual(allocateSpend({ promoBalance: 0, lots: [lot], amount: 6 }), { status: 'insufficient' })
-  assert.throws(() => allocateSpend({ promoBalance: 0, lots: [lot], amount: 0 }), /invalid_amount/)
-  assert.throws(() => allocateSpend({ promoBalance: 0, lots: [lot], amount: -1 }), /invalid_amount/)
-  assert.throws(() => allocateSpend({ promoBalance: 0, lots: [lot], amount: 1.5 }), /invalid_amount/)
+  assert.deepEqual(allocateSpend({ promoGrants: [], lots: [lot], amount: 6 }), { status: 'insufficient' })
+  assert.throws(() => allocateSpend({ promoGrants: [], lots: [lot], amount: 0 }), /invalid_amount/)
+  assert.throws(() => allocateSpend({ promoGrants: [], lots: [lot], amount: -1 }), /invalid_amount/)
+  assert.throws(() => allocateSpend({ promoGrants: [], lots: [lot], amount: 1.5 }), /invalid_amount/)
 
   // promo-only spend is ok
-  const promoOnly = allocateSpend({ promoBalance: 10, lots: [], amount: 10 })
+  const promoOnly = allocateSpend({
+    promoGrants: [{ id: 'pg-1', coinsRemaining: 10, expiresAt: FAR }],
+    lots: [],
+    amount: 10,
+  })
   assert.equal(promoOnly.status, 'ok')
   if (promoOnly.status === 'ok') {
     assert.equal(promoOnly.promoSpent, 10)
@@ -137,7 +233,11 @@ test('allocateSpend: insufficient and invalid amounts', () => {
   }
 
   // every ok result's allocations sum to amount
-  const r = allocateSpend({ promoBalance: 3, lots: [lot], amount: 8 })
+  const r = allocateSpend({
+    promoGrants: [{ id: 'pg-1', coinsRemaining: 3, expiresAt: FAR }],
+    lots: [lot],
+    amount: 8,
+  })
   assert.equal(r.status, 'ok')
   if (r.status === 'ok') {
     assert.equal(r.allocations.reduce((sum, a) => sum + a.coins, 0), 8)
@@ -148,7 +248,14 @@ test('developerEarnings: promo-only spend pays nothing', () => {
   const rows = [
     {
       gameId: 'g-promo',
-      allocation: { source: 'promo' as const, lotId: null, coins: 100, coinsOffset: null, valueCents: 0 },
+      allocation: {
+        source: 'promo' as const,
+        lotId: null,
+        promoGrantId: 'pg-promo',
+        coins: 100,
+        coinsOffset: null,
+        valueCents: 0,
+      },
       lot: null,
       deductions: [],
     },
@@ -175,8 +282,16 @@ test('developerEarnings: deductions split across games', () => {
     coinsVoided: 0,
     grossCents: 500,
   }
-  const r1 = allocateSpend({ promoBalance: 100, lots: [lot], amount: 400 })
-  const r2 = allocateSpend({ promoBalance: 0, lots: r1.status === 'ok' ? r1.lots : [lot], amount: 250 })
+  const r1 = allocateSpend({
+    promoGrants: [{ id: 'pg-1', coinsRemaining: 100, expiresAt: FAR }],
+    lots: [lot],
+    amount: 400,
+  })
+  const r2 = allocateSpend({
+    promoGrants: r1.status === 'ok' ? r1.promoGrants : [],
+    lots: r1.status === 'ok' ? r1.lots : [lot],
+    amount: 250,
+  })
   assert.equal(r1.status, 'ok')
   assert.equal(r2.status, 'ok')
   if (r1.status !== 'ok' || r2.status !== 'ok') return
@@ -206,19 +321,19 @@ test('developerEarnings: deductions split across games', () => {
   assert.deepEqual(earnings, [
     {
       gameId: 'g1',
-      paidCoinsSpent: 300,
-      promoCoinsSpent: 100,
-      grossPaidValueCents: 272,
-      netPaidValueCents: 234,
-      developerShareCents: 152,
+      paidCoinsSpent: 400,
+      promoCoinsSpent: 0,
+      grossPaidValueCents: 363,
+      netPaidValueCents: 312,
+      developerShareCents: 202,
     },
     {
       gameId: 'g2',
-      paidCoinsSpent: 250,
-      promoCoinsSpent: 0,
-      grossPaidValueCents: 228,
-      netPaidValueCents: 196,
-      developerShareCents: 127,
+      paidCoinsSpent: 150,
+      promoCoinsSpent: 100,
+      grossPaidValueCents: 137,
+      netPaidValueCents: 118,
+      developerShareCents: 76,
     },
   ])
   assert.equal(earnings[0].netPaidValueCents + earnings[1].netPaidValueCents, 430)
@@ -233,7 +348,7 @@ test('developerEarnings: chargeback, partial refund, and capped refund', () => {
     coinsVoided: 0,
     grossCents: 500,
   }
-  const r = allocateSpend({ promoBalance: 0, lots: [lot], amount: 200 })
+  const r = allocateSpend({ promoGrants: [], lots: [lot], amount: 200 })
   assert.equal(r.status, 'ok')
   if (r.status !== 'ok') return
 
@@ -256,7 +371,7 @@ test('developerEarnings: chargeback, partial refund, and capped refund', () => {
     coinsVoided: 110,
     grossCents: 500,
   }
-  const partialSpend = allocateSpend({ promoBalance: 0, lots: [partialLot], amount: 440 })
+  const partialSpend = allocateSpend({ promoGrants: [], lots: [partialLot], amount: 440 })
   assert.equal(partialSpend.status, 'ok')
   if (partialSpend.status !== 'ok') return
   const partialRows = partialSpend.allocations.map((allocation) => ({
@@ -277,7 +392,7 @@ test('developerEarnings: chargeback, partial refund, and capped refund', () => {
     coinsVoided: 110,
     grossCents: 500,
   }
-  const cappedSpend = allocateSpend({ promoBalance: 0, lots: [cappedLot], amount: 440 })
+  const cappedSpend = allocateSpend({ promoGrants: [], lots: [cappedLot], amount: 440 })
   assert.equal(cappedSpend.status, 'ok')
   if (cappedSpend.status !== 'ok') return
   const cappedRows = cappedSpend.allocations.map((allocation) => ({

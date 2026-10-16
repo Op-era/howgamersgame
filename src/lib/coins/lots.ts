@@ -1,5 +1,6 @@
-// The SQL functions in src/lib/supabase/migrations/2026-10-15-f-coin-lots.sql are the
-// source of truth. This mirror exists so the rules can be unit tested and reused.
+// The SQL functions in src/lib/supabase/migrations/2026-10-15-f-coin-lots.sql and
+// src/lib/supabase/migrations/2026-10-16-g-promo-grants.sql are the source of truth.
+// This mirror exists so the rules can be unit tested and reused.
 // All money math uses integers; products use BigInt internally so nothing overflows or rounds.
 
 export type LotInput = {
@@ -11,9 +12,16 @@ export type LotInput = {
   grossCents: number
 }
 
+export type PromoGrantInput = {
+  id: string
+  coinsRemaining: number
+  expiresAt: string | number | Date
+}
+
 export type Allocation = {
   source: 'promo' | 'paid'
   lotId: string | null
+  promoGrantId: string | null
   coins: number
   coinsOffset: number | null
   valueCents: number
@@ -52,29 +60,49 @@ export function coinValueSlice(
 }
 
 export function allocateSpend(input: {
-  promoBalance: number
+  promoGrants: PromoGrantInput[]
   lots: LotInput[]
   amount: number
+  now?: string | number | Date
 }):
-  | { status: 'ok'; promoSpent: number; paidSpent: number; allocations: Allocation[]; lots: LotInput[] }
+  | {
+      status: 'ok'
+      promoSpent: number
+      paidSpent: number
+      allocations: Allocation[]
+      lots: LotInput[]
+      promoGrants: PromoGrantInput[]
+    }
   | { status: 'insufficient' } {
-  assertSafeInteger(input.promoBalance, 'invalid_amount')
   assertSafeInteger(input.amount, 'invalid_amount')
   if (input.amount <= 0) throw new Error('invalid_amount')
 
-  const balance = input.promoBalance + input.lots.reduce((sum, lot) => sum + lot.coinsRemaining, 0)
+  const now = input.now === undefined ? new Date() : new Date(input.now)
+  const nowTime = now.getTime()
+
+  for (const grant of input.promoGrants) {
+    assertSafeInteger(grant.coinsRemaining, 'invalid_amount')
+    if (grant.coinsRemaining < 0) throw new Error('invalid_amount')
+  }
+
+  const usableGrants = input.promoGrants
+    .filter((grant) => grant.coinsRemaining > 0 && new Date(grant.expiresAt).getTime() > nowTime)
+    .sort((a, b) => {
+      const at = new Date(a.expiresAt).getTime()
+      const bt = new Date(b.expiresAt).getTime()
+      if (at !== bt) return at - bt
+      return a.id < b.id ? -1 : a.id > b.id ? 1 : 0
+    })
+
+  const balance =
+    input.lots.reduce((sum, lot) => sum + lot.coinsRemaining, 0) +
+    usableGrants.reduce((sum, grant) => sum + grant.coinsRemaining, 0)
   if (input.amount > balance) return { status: 'insufficient' }
 
   let need = input.amount
   let promoSpent = 0
   let paidSpent = 0
   const allocations: Allocation[] = []
-
-  if (input.promoBalance > 0 && need > 0) {
-    promoSpent = Math.min(input.promoBalance, need)
-    need -= promoSpent
-    allocations.push({ source: 'promo', lotId: null, coins: promoSpent, coinsOffset: null, valueCents: 0 })
-  }
 
   const lots = input.lots
     .filter((lot) => lot.coinsRemaining > 0)
@@ -86,24 +114,47 @@ export function allocateSpend(input: {
     })
 
   const updatedLots = input.lots.map((lot) => ({ ...lot }))
+  const updatedGrants = input.promoGrants.map((grant) => ({ ...grant }))
 
   for (const lot of lots) {
     if (need === 0) break
     const take = Math.min(lot.coinsRemaining, need)
     const coinsOffset = lot.coinsTotal - lot.coinsRemaining - lot.coinsVoided
     const valueCents = coinValueSlice(lot.coinsTotal, lot.grossCents, coinsOffset, take)
-    allocations.push({ source: 'paid', lotId: lot.id, coins: take, coinsOffset, valueCents })
+    allocations.push({
+      source: 'paid',
+      lotId: lot.id,
+      promoGrantId: null,
+      coins: take,
+      coinsOffset,
+      valueCents,
+    })
     need -= take
     paidSpent += take
     const updated = updatedLots.find((l) => l.id === lot.id)
     if (updated) updated.coinsRemaining -= take
   }
 
-  if (need > 0) throw new Error('wallet_inconsistent')
+  for (const grant of usableGrants) {
+    if (need === 0) break
+    const take = Math.min(grant.coinsRemaining, need)
+    allocations.push({
+      source: 'promo',
+      lotId: null,
+      promoGrantId: grant.id,
+      coins: take,
+      coinsOffset: null,
+      valueCents: 0,
+    })
+    need -= take
+    promoSpent += take
+    const updated = updatedGrants.find((g) => g.id === grant.id)
+    if (updated) updated.coinsRemaining -= take
+  }
 
   if (need > 0) throw new Error('wallet_inconsistent')
 
-  return { status: 'ok', promoSpent, paidSpent, allocations, lots: updatedLots }
+  return { status: 'ok', promoSpent, paidSpent, allocations, lots: updatedLots, promoGrants: updatedGrants }
 }
 
 export function lotNetCents(grossCents: number, deductions: Deduction[]): number {
