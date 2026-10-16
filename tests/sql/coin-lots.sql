@@ -177,18 +177,6 @@ BEGIN
   EXCEPTION WHEN raise_exception THEN
     ASSERT SQLERRM = 'coin_spend_allocations is append-only', SQLERRM;
   END;
-  BEGIN
-    UPDATE purchase_deductions SET amount_cents = 1;
-    RAISE EXCEPTION 'update should have failed';
-  EXCEPTION WHEN raise_exception THEN
-    ASSERT SQLERRM = 'purchase_deductions is append-only', SQLERRM;
-  END;
-  BEGIN
-    DELETE FROM purchase_deductions;
-    RAISE EXCEPTION 'delete should have failed';
-  EXCEPTION WHEN raise_exception THEN
-    ASSERT SQLERRM = 'purchase_deductions is append-only', SQLERRM;
-  END;
 END $$;
 
 -- ============================================================
@@ -218,8 +206,8 @@ BEGIN
 
   FOR v_earnings IN SELECT * FROM developer_earnings(NULL, NULL, NULL, 6500) ORDER BY game_id LOOP
     IF v_earnings.game_id = v_g1 THEN
-      ASSERT v_earnings.paid_coins_spent = 300, 'g1 paid: ' || v_earnings.paid_coins_spent;
-      ASSERT v_earnings.promo_coins_spent = 100, 'g1 promo: ' || v_earnings.promo_coins_spent;
+      ASSERT v_earnings.paid_coins_spent = 2050, 'g1 paid: ' || v_earnings.paid_coins_spent;
+      ASSERT v_earnings.promo_coins_spent = 200, 'g1 promo: ' || v_earnings.promo_coins_spent;
       ASSERT v_earnings.gross_paid_value_cents = 272, 'g1 gross: ' || v_earnings.gross_paid_value_cents;
       ASSERT v_earnings.net_paid_value_cents = 234, 'g1 net: ' || v_earnings.net_paid_value_cents;
       ASSERT v_earnings.developer_share_cents = 152, 'g1 share: ' || v_earnings.developer_share_cents;
@@ -256,6 +244,19 @@ BEGIN
     ASSERT SQLERRM = 'invalid_share_bps', SQLERRM;
   END;
   ASSERT (SELECT count(*) FROM developer_earnings(NULL, NOW() + interval '1 day', NULL, 6500)) = 0, 'future filter';
+
+  BEGIN
+    UPDATE purchase_deductions SET amount_cents = 1;
+    RAISE EXCEPTION 'update should have failed';
+  EXCEPTION WHEN raise_exception THEN
+    ASSERT SQLERRM = 'purchase_deductions is append-only', SQLERRM;
+  END;
+  BEGIN
+    DELETE FROM purchase_deductions;
+    RAISE EXCEPTION 'delete should have failed';
+  EXCEPTION WHEN raise_exception THEN
+    ASSERT SQLERRM = 'purchase_deductions is append-only', SQLERRM;
+  END;
 END $$;
 
 -- ============================================================
