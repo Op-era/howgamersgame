@@ -8,6 +8,7 @@ INSERT INTO games (id, slug, title, game_url) VALUES
   ('99999999-9999-4999-8999-999999999999', 'g1', 'G1', 'https://g1.test'),
   ('88888888-8888-4888-8888-888888888888', 'g2', 'G2', 'https://g2.test');
 UPDATE profiles SET coin_balance = 100, promo_balance = 100 WHERE id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+INSERT INTO promo_grants (user_id, coins_granted, coins_remaining, granted_at, expires_at, source) VALUES ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 100, 100, NOW(), NOW() + INTERVAL '720 hours', 'award');
 
 DO $$
 DECLARE
