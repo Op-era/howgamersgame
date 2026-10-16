@@ -655,11 +655,11 @@ DO $$
 BEGIN
   IF NOT EXISTS (
     SELECT 1 FROM pg_constraint
-     WHERE conname = 'coin_spend_allocations_source_check'
+     WHERE conname = 'coin_spend_allocations_source_shape'
        AND conrelid = 'coin_spend_allocations'::regclass
   ) THEN
     ALTER TABLE coin_spend_allocations
-      ADD CONSTRAINT coin_spend_allocations_source_check CHECK (
+      ADD CONSTRAINT coin_spend_allocations_source_shape CHECK (
         (source = 'promo' AND lot_id IS NULL AND coins_offset IS NULL AND value_cents = 0)
         OR
         (source = 'paid' AND lot_id IS NOT NULL AND coins_offset IS NOT NULL)
