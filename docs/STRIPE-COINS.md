@@ -106,20 +106,22 @@ Do **only** with Shane's go-ahead. Costs $5 plus Stripe's fee, refundable.
 8. Refund the payment in Stripe Dashboard (Payments > the $5 payment > Refund).
 9. **Refunds do not reverse coins automatically** (see below). Reverse the test account by hand:
    ```sql
-   begin;
-   update profiles set coin_balance = greatest(coin_balance - 550, 0), total_coins_purchased = greatest(total_coins_purchased - 550, 0) where id = '<TEST_USER_ID>';
-   insert into coin_transactions (user_id, type, amount, balance_after, description)
-     select id, 'refund', -550, coin_balance, 'Manual reversal of live test purchase' from profiles where id = '<TEST_USER_ID>';
-   insert into revenue_events (event_type, user_id, package_id, gross_cents, currency, coins_credited, bonus_coins, stripe_event_id, stripe_checkout_session_id)
-     values ('refund', '<TEST_USER_ID>', 'player', 500, 'usd', -550, -50, 'manual_refund_<ANY_UNIQUE_STRING>', '<cs_live_... of the test>');
-   commit;
+   -- Needs migration 2026-10-15-f-coin-lots.sql. Never edit profiles.coin_balance by hand: it must equal
+   -- promo_balance + the coins left in the user's lots, and record_purchase_deduction keeps that true.
+   -- 1. Find the purchase (revenue event id) of the test charge:
+   select id, user_id, gross_cents, coins_credited from revenue_events
+    where stripe_checkout_session_id = '<cs_live_... of the test>' and event_type = 'purchase';
+   -- 2. Record the refund and take back the unspent coins (service role only; safe to run twice with the same ref):
+   select record_purchase_deduction('<REVENUE_EVENT_ID>', 'refund', 500, 'manual_refund_<ANY_UNIQUE_STRING>', 550, 'Manual reversal of live test purchase');
+   -- 3. Check the wallet still adds up (expect zero rows):
+   select * from wallet_consistency_report();
    ```
    Only for the test account; if the balance was already spent, decide separately.
 
 ## Known gaps and follow-ups (not done here)
 
 - **Refunds and chargebacks** do not claw back coins or write ledger rows, by decision (see the terms section). `revenue_events` allows `refund` / `chargeback` types for later. Watch the Stripe Dashboard for disputes; a lost dispute costs money plus a fee.
-- Spent and awarded coins are not tracked as "paid" versus "free" lots. ROADMAP's developer payout model (paid value of the coin lot) needs that before payouts exist.
+- Paid and free coins are now tracked as lots (see the lots section below), but the Stripe webhook does not yet call record_purchase_deduction, so taxes, processing fees, refunds and chargebacks are not recorded automatically; until it is wired, developer earnings are overstated by those amounts. Spends made before the lots migration have no allocations, so their developer earnings cannot be computed from lots.
 - Games can award up to 10,000 coins per call with no daily cap per game or per player. Consider caps before opening the API to outside developers.
 - `verifyGameApiKey` accepts keys of games that are marked inactive.
 - Other emails (`sendConfirmationEmail`, password reset) still interpolate `displayName` into HTML without escaping.
@@ -136,6 +138,36 @@ Wording lives on `/terms` section 4 ("Coin economy and coin purchases") and in `
 **Legal review needed.** This wording is a plain language draft written by engineering. The Chief of Staff has legal drafts for the howgamersgame Terms of Service (task 8549551d); Legal should replace or approve the section 4 text before launch, and then the version should be bumped. Open questions for Legal: the "law where you live" carve out, the chargeback sentence ("we may suspend your account while we look into it"), and whether minors (13 to 17) can be bound.
 
 Refund reversal is **not implemented** (by decision): the app never takes coins back after a refund or chargeback, and no `refund` / `chargeback` rows are written. If you refund someone in the Stripe Dashboard anyway, only the test account steps above remove coins.
+
+## Coin lots and spend allocation (migration 2026-10-15-f-coin-lots.sql)
+
+- **Free promo coins** are held in `profiles.promo_balance` and are worth nothing to developers. **Paid coins** live in `coin_lots`: one lot per purchase, linked to its `revenue_events` row. A lot's coins include bonus coins, so each paid coin is worth the price paid divided by the coins received (for example 500 cents for 550 coins).
+- Invariant: `coin_balance = promo_balance + sum(coin_lots.coins_remaining)`. `wallet_consistency_report()` lists any user where this is false.
+- `spend_coins()` takes free promo coins first, then paid coins from the oldest purchase first. It locks the wallet row and the lots (`FOR UPDATE`), so concurrent spends cannot overspend, and records each lot it used in `coin_spend_allocations` (coins, value in cents). Values are whole cents, split with a cumulative floor so rounding never drifts.
+- `award_coins()` adds promo coins only. `/api/coins/award` currently returns 403 by policy, so promo coins exist only if awards are re-enabled or from the backfill.
+- `record_purchase_deduction(revenue_event_id, kind, amount_cents, external_ref, void_coins, note)` records a tax, processing fee, refund or chargeback against a purchase (kind is `tax`, `processing_fee`, `refund` or `chargeback`; the same kind and external_ref twice is ignored). For a refund or chargeback, `void_coins` removes that many unspent coins from the lot and from the balance. It is service role only and nothing calls it yet.
+- `developer_earnings(game_id, from, to, share_bps)` reports, per game, the paid coins spent, their gross value, the net value (gross minus deductions on the purchases they came from) and the developer share (65% of net by default). Promo coins pay nothing.
+- The migration's backfill converts each existing balance: coins matching a purchase become lot coins (newest purchases hold what is left), anything else becomes promo. Rollback: restore `credit_coin_purchase`, `spend_coins`, `award_coins` and `protect_wallet_columns` from migrations a, b and c, then drop the new tables; `coin_balance` is never changed by the migration.
+
+## Coin lots and spend allocation (migration 2026-10-15-f-coin-lots.sql)
+
+- **Free promo coins** are held in `profiles.promo_balance` and are worth nothing to developers. **Paid coins** live in `coin_lots`: one lot per purchase, linked to its `revenue_events` row. A lot's coins include bonus coins, so each paid coin is worth the price paid divided by the coins received (for example 500 cents for 550 coins).
+- Invariant: `coin_balance = promo_balance + sum(coin_lots.coins_remaining)`. `wallet_consistency_report()` lists any user where this is false.
+- `spend_coins()` takes free promo coins first, then paid coins from the oldest purchase first. It locks the wallet row and the lots (`FOR UPDATE`), so concurrent spends cannot overspend, and records each lot it used in `coin_spend_allocations` (coins, value in cents). Values are whole cents, split with a cumulative floor so rounding never drifts.
+- `award_coins()` adds promo coins only. `/api/coins/award` currently returns 403 by policy, so promo coins exist only if awards are re-enabled or from the backfill.
+- `record_purchase_deduction(revenue_event_id, kind, amount_cents, external_ref, void_coins, note)` records a tax, processing fee, refund or chargeback against a purchase (kind is `tax`, `processing_fee`, `refund` or `chargeback`; the same kind and external_ref twice is ignored). For a refund or chargeback, `void_coins` removes that many unspent coins from the lot and from the balance. It is service role only and nothing calls it yet.
+- `developer_earnings(game_id, from, to, share_bps)` reports, per game, the paid coins spent, their gross value, the net value (gross minus deductions on the purchases they came from) and the developer share (65% of net by default). Promo coins pay nothing.
+- The migration's backfill converts each existing balance: coins matching a purchase become lot coins (newest purchases hold what is left), anything else becomes promo. Rollback: restore `credit_coin_purchase`, `spend_coins`, `award_coins` and `protect_wallet_columns` from migrations a, b and c, then drop the new tables; `coin_balance` is never changed by the migration.
+
+## Coin lots and spend allocation (migration 2026-10-15-f-coin-lots.sql)
+
+- **Free promo coins** are held in `profiles.promo_balance` and are worth nothing to developers. **Paid coins** live in `coin_lots`: one lot per purchase, linked to its `revenue_events` row. A lot's coins include bonus coins, so each paid coin is worth the price paid divided by the coins received (for example 500 cents for 550 coins).
+- Invariant: `coin_balance = promo_balance + sum(coin_lots.coins_remaining)`. `wallet_consistency_report()` lists any user where this is false.
+- `spend_coins()` takes free promo coins first, then paid coins from the oldest purchase first. It locks the wallet row and the lots (`FOR UPDATE`), so concurrent spends cannot overspend, and records each lot it used in `coin_spend_allocations` (coins, value in cents). Values are whole cents, split with a cumulative floor so rounding never drifts.
+- `award_coins()` adds promo coins only. `/api/coins/award` currently returns 403 by policy, so promo coins exist only if awards are re-enabled or from the backfill.
+- `record_purchase_deduction(revenue_event_id, kind, amount_cents, external_ref, void_coins, note)` records a tax, processing fee, refund or chargeback against a purchase (kind is `tax`, `processing_fee`, `refund` or `chargeback`; the same kind and external_ref twice is ignored). For a refund or chargeback, `void_coins` removes that many unspent coins from the lot and from the balance. It is service role only and nothing calls it yet.
+- `developer_earnings(game_id, from, to, share_bps)` reports, per game, the paid coins spent, their gross value, the net value (gross minus deductions on the purchases they came from) and the developer share (65% of net by default). Promo coins pay nothing.
+- The migration's backfill converts each existing balance: coins matching a purchase become lot coins (newest purchases hold what is left), anything else becomes promo. Rollback: restore `credit_coin_purchase`, `spend_coins`, `award_coins` and `protect_wallet_columns` from migrations a, b and c, then drop the new tables; `coin_balance` is never changed by the migration.
 
 ## Tests
 
