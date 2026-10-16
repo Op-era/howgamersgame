@@ -165,7 +165,7 @@ Refund reversal is **not implemented** (by decision): the app never takes coins 
 ## Tests
 
 ```sh
-npm test    # node --test "tests/**/*.test.ts": 28 tests, no network, no keys needed
+npm test    # node --test "tests/**/*.test.ts": 51 tests, no network, no keys needed (includes lots allocation, promo grants, starter grant and cron auth tests)
 ```
 
 Covers pack/price table, session validation, duplicate/concurrent delivery against an in memory model of the SQL function, failure then retry, real Stripe signature verification with a fake secret, HTML escaping, history payload, spend/award request parsing and result mapping, and the terms rules (acceptance, stale version, server stamped time, wording has no dashes, route and store page enforce it).
@@ -175,13 +175,20 @@ SQL, against a **scratch** Postgres only (never production). One command builds 
 ```sh
 export PSQL_BASE="psql -h /tmp -p 54329 -U postgres"
 sh tests/sql/setup-scratch.sh scratch
-for f in coin-purchase wallet-protection spend-award; do $PSQL_BASE -d scratch -q -v ON_ERROR_STOP=1 -f tests/sql/$f.sql; done
+for f in coin-purchase wallet-protection spend-award coin-lots promo-grants; do $PSQL_BASE -d scratch -q -v ON_ERROR_STOP=1 -f tests/sql/$f.sql; done
 PSQL="$PSQL_BASE -d scratch" sh tests/sql/concurrency.sh
 PSQL="$PSQL_BASE -d scratch" sh tests/sql/spend-award-concurrency.sh
+PSQL="$PSQL_BASE -d scratch" sh tests/sql/coin-lots-concurrency.sh
+bash tests/sql/coin-lots-backfill.sh lots_bf; bash tests/sql/promo-grants-backfill.sh promo_bf
 ```
 
 - `wallet-protection.sql`: as `anon` and `authenticated` (real `SET ROLE`), every direct write to `coin_balance`, `total_coins_purchased`, profile inserts and upserts (`INSERT .. ON CONFLICT DO UPDATE`), other players' rows, `coin_transactions`, `revenue_events`, `stripe_events`, `game_api_keys`, `coin_packages` and `games` is refused; reading key hashes and revenue is refused; display name edits and reading your own balance still work; the service role still works; and with privileges deliberately re-granted, the trigger alone still blocks the balance change.
 - `spend-award.sql`: ledger rows, replay, key conflicts, insufficient funds, caps, validation, `anon` / `authenticated` cannot call the functions.
 - `spend-award-concurrency.sh`: 25 parallel spends against a balance of 100 (exactly 3 apply, balance 10, never negative), 12 parallel retries with one key (applied once), 12 parallel award retries (applied once), 40 mixed parallel operations (balance equals the ledger), purchases and spends in parallel.
+
+- `coin-lots.sql`: lot creation, paid-first allocation values, per spend allocations, deductions, wallet consistency report, atomic rollback.
+- `promo-grants.sql`: award creates a grant (cap 1,000), starter grant once per account (150), paid-first then soonest-expiring, expired grants never spent, idempotent sweep, append-only `promo_expirations`, access control, no expiry column on `coin_lots`.
+- `coin-lots-concurrency.sh`: 100 parallel spends with paid-first order, duplicate deductions, spends racing voids.
+- `promo-grants-backfill.sh`: applies migrations a to f on legacy data, then g twice; checks grandfather grants, unchanged balances, idempotence and post-migration spends.
 
 The scratch DB needs the stand-ins in `tests/sql/supabase-stub.sql` for `auth.users`, `auth.uid()`, `auth.role()` and the three Supabase roles.
