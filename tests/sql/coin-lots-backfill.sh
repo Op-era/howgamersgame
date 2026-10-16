@@ -103,7 +103,7 @@ check "L4 balance unchanged" "$bal_before_l4" "$($PSQL -d "$DB" -c "select coin_
 check "L5 balance unchanged" "$bal_before_l5" "$($PSQL -d "$DB" -c "select coin_balance from profiles where id='$L5'")"
 
 check "wallet consistency report empty" "0" "$($PSQL -d "$DB" -c "select count(*) from wallet_consistency_report()")"
-check "backfill state row exists" "1" "$($PSQL -d "$DB" -c "select count(*) from wallet_migration_state where migration_key='coin_lots_backfill_v1'")"
+check "backfill state row exists" "1" "$($PSQL -d "$DB" -c "select count(*) from wallet_migration_state where name='coin_lots_backfill_v1'")"
 
 check "lot coins_total matches revenue" "0" "$($PSQL -d "$DB" -c "select count(*) from coin_lots cl join revenue_events re on re.id=cl.revenue_event_id where cl.coins_total != re.coins_credited")"
 check "lot gross_cents matches revenue" "0" "$($PSQL -d "$DB" -c "select count(*) from coin_lots cl join revenue_events re on re.id=cl.revenue_event_id where cl.gross_cents != re.gross_cents")"
@@ -114,7 +114,7 @@ $PSQL_BASE -d "$DB" -q -v ON_ERROR_STOP=1 -f "$D/src/lib/supabase/migrations/202
 
 check "L1 promo_balance after re-run" "0" "$($PSQL -d "$DB" -c "select promo_balance from profiles where id='$L1'")"
 check "L1 newest lot remaining after re-run" "1050" "$($PSQL -d "$DB" -c "select coins_remaining from coin_lots where user_id='$L1' order by purchased_at desc limit 1")"
-check "backfill state row count after re-run" "1" "$($PSQL -d "$DB" -c "select count(*) from wallet_migration_state where migration_key='coin_lots_backfill_v1'")"
+check "backfill state row count after re-run" "1" "$($PSQL -d "$DB" -c "select count(*) from wallet_migration_state where name='coin_lots_backfill_v1'")"
 check "wallet consistency report empty after re-run" "0" "$($PSQL -d "$DB" -c "select count(*) from wallet_consistency_report()")"
 
 spend_json=$($PSQL -d "$DB" -c "select spend_coins('$L1','$G',1050,'x','post-1')")
