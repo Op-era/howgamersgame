@@ -34,13 +34,14 @@ Set in the hosting environment (Fly secrets or equivalent). Never commit values.
 
 ## Database setup (Supabase SQL Editor)
 
-Run all three files **in this order**. All are safe to re-run. For a brand new database, `schema.sql` already contains them (regenerate with `python3 scripts/sync-schema.py` after editing a migration).
+Run all files **in this order** (the fourth, `f`, is NOT applied anywhere yet; it needs Shane's go-ahead). All are safe to re-run. For a brand new database, `schema.sql` already contains them (regenerate with `python3 scripts/sync-schema.py` after editing a migration).
 
 1. `src/lib/supabase/migrations/2026-10-04-a-coin-purchase-ledger.sql`: `stripe_events`, `revenue_events` (append only, includes terms version and acceptance time), the `stripe_checkout_session_id` column, and `credit_coin_purchase()`.
 2. `src/lib/supabase/migrations/2026-10-04-b-wallet-protection.sql` (**required, not optional**): players can never change their own coins.
 3. `src/lib/supabase/migrations/2026-10-04-c-spend-award.sql`: atomic, idempotent `spend_coins()` and `award_coins()`, and the `idempotency_key` ledger column.
+4. `src/lib/supabase/migrations/2026-10-15-f-coin-lots.sql`: free promo coins versus paid coin lots, spend allocations, purchase deductions, and the rewritten `spend_coins()` / `award_coins()` / `credit_coin_purchase()`. See the lots section below.
 
-**Run order warning:** deploy the code only after all three are applied. The new routes call functions that do not exist before the migrations, and `/store` needs `revenue_events`.
+**Run order warning:** deploy the code only after all of them are applied. The new routes call functions that do not exist before the migrations, and `/store` needs `revenue_events`.
 
 ### Wallet protection (file b): who can change what
 
