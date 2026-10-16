@@ -3,7 +3,7 @@
 # Usage: PSQL="psql -h /tmp -p 54329 -U postgres -d scratch" sh tests/sql/spend-award-concurrency.sh
 set -e
 : "${PSQL:?set PSQL}"
-Q="$PSQL -q -At -d postgres"
+Q="$PSQL -q -At"
 G=77777777-7777-4777-8777-777777777777
 $Q -c "insert into games(id,slug,title,game_url) values ('$G','conc-$$','C','https://c.test')"
 newuser() { U=$(uuidgen | tr A-Z a-z); $Q -c "insert into auth.users(id,email) values ('$U','$U@t.invalid')"; $Q -c "update profiles set coin_balance=$1, promo_balance=$1 where id='$U'"; if [ "$1" -gt 0 ]; then $Q -c "insert into promo_grants(user_id,coins_granted,coins_remaining,granted_at,expires_at,source) values ('$U',$1,$1,now(),now()+interval '720 hours','award')"; fi; }
