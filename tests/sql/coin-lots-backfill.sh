@@ -117,11 +117,12 @@ check "L1 newest lot remaining after re-run" "1050" "$($PSQL -d "$DB" -c "select
 check "backfill state row count after re-run" "1" "$($PSQL -d "$DB" -c "select count(*) from wallet_migration_state where migration_key='coin_lots_backfill_v1'")"
 check "wallet consistency report empty after re-run" "0" "$($PSQL -d "$DB" -c "select count(*) from wallet_consistency_report()")"
 
-spend_result=$($PSQL -d "$DB" -c "select status||'|'||promo_spent||'|'||paid_spent from spend_coins('$L1','$G',1050,'x','post-1')")
+spend_json=$($PSQL -d "$DB" -c "select spend_coins('$L1','$G',1050,'x','post-1')")
+spend_result=$($PSQL -d "$DB" -c "select r->>'status'||'|'||(r->>'promo_spent')||'|'||(r->>'paid_spent') from (select '$spend_json'::jsonb r) t")
 check "post-migration spend result" "ok|0|1050" "$spend_result"
-check "post-migration spend allocation count" "1" "$($PSQL -d "$DB" -c "select count(*) from coin_spend_allocations where spend_transaction_id=(select id from coin_transactions where user_id='$L1' and idempotency_key='post-1')")"
-check "post-migration allocation coins_offset" "150" "$($PSQL -d "$DB" -c "select coins_offset from coin_spend_allocations where spend_transaction_id=(select id from coin_transactions where user_id='$L1' and idempotency_key='post-1')")"
-check "post-migration allocation value_cents" "875" "$($PSQL -d "$DB" -c "select value_cents from coin_spend_allocations where spend_transaction_id=(select id from coin_transactions where user_id='$L1' and idempotency_key='post-1')")"
+check "post-migration spend allocation count" "1" "$($PSQL -d "$DB" -c "select count(*) from coin_spend_allocations where coin_transaction_id=(select id from coin_transactions where user_id='$L1' and type='spend' and idempotency_key='post-1')")"
+check "post-migration allocation coins_offset" "150" "$($PSQL -d "$DB" -c "select coins_offset from coin_spend_allocations where coin_transaction_id=(select id from coin_transactions where user_id='$L1' and type='spend' and idempotency_key='post-1')")"
+check "post-migration allocation value_cents" "875" "$($PSQL -d "$DB" -c "select value_cents from coin_spend_allocations where coin_transaction_id=(select id from coin_transactions where user_id='$L1' and type='spend' and idempotency_key='post-1')")"
 check "post-migration report empty" "0" "$($PSQL -d "$DB" -c "select count(*) from wallet_consistency_report()")"
 check "post-migration lot remaining" "0" "$($PSQL -d "$DB" -c "select coins_remaining from coin_lots where user_id='$L1' order by purchased_at desc limit 1")"
 
