@@ -681,7 +681,7 @@ BEGIN
     promo_coins_spent := v_promo;
     gross_paid_value_cents := v_gross;
     net_paid_value_cents := v_net;
-    developer_share_cents := FLOOR(v_net * p_share_bps / 10000);
+    developer_share_cents := (v_net * p_share_bps) / 10000;
     RETURN NEXT;
   END LOOP;
 END;
