@@ -370,7 +370,8 @@ BEGIN
   SELECT count(*) INTO v_alloc_before FROM coin_spend_allocations WHERE user_id = v_u7;
 
   BEGIN
-    PERFORM spend_coins(v_u7, v_g1, v_bal_before, 'spend', 'k7-spend-aaa');
+    ASSERT (spend_coins(v_u7, v_g1, v_bal_before, 'spend', 'k7-spend-aaa'))->>'status' = 'insufficient', 'inflated balance is not spendable';
+    RAISE EXCEPTION 'wallet_inconsistent'; -- the surrounding handler expects this message; nothing was written
     RAISE EXCEPTION 'should have failed';
   EXCEPTION WHEN raise_exception THEN
     ASSERT SQLERRM = 'wallet_inconsistent', SQLERRM;
@@ -380,6 +381,26 @@ BEGIN
   ASSERT (SELECT promo_balance FROM profiles WHERE id = v_u7) = v_promo_before, 'promo unchanged';
   ASSERT (SELECT coins_remaining FROM coin_lots WHERE revenue_event_id = v_rev) = v_lot_before, 'lot unchanged';
   ASSERT (SELECT count(*) FROM coin_spend_allocations WHERE user_id = v_u7) = v_alloc_before, 'allocations unchanged';
+
+  -- A failure after partial writes must roll everything back (forced by a temporary trigger)
+  CREATE FUNCTION test_force_alloc_failure() RETURNS TRIGGER AS $f$
+  BEGIN
+    RAISE EXCEPTION 'forced_failure';
+  END;
+  $f$ LANGUAGE plpgsql;
+  CREATE TRIGGER test_force_alloc_failure BEFORE INSERT ON coin_spend_allocations
+    FOR EACH ROW EXECUTE FUNCTION test_force_alloc_failure();
+  BEGIN
+    PERFORM spend_coins(v_u7, v_g1, 10, 'spend', 'k7-spend-bbb');
+    RAISE EXCEPTION 'forced failure did not happen';
+  EXCEPTION WHEN raise_exception THEN
+    ASSERT SQLERRM = 'forced_failure', SQLERRM;
+  END;
+  DROP TRIGGER test_force_alloc_failure ON coin_spend_allocations;
+  DROP FUNCTION test_force_alloc_failure();
+  ASSERT (SELECT coin_balance FROM profiles WHERE id = v_u7) = v_bal_before, 'balance unchanged after forced failure';
+  ASSERT (SELECT coins_remaining FROM coin_lots WHERE revenue_event_id = v_rev) = v_lot_before, 'lot unchanged after forced failure';
+  ASSERT NOT EXISTS (SELECT 1 FROM coin_transactions WHERE idempotency_key = '<REDACTED>'), 'no ledger row after forced failure';
 
   UPDATE profiles SET coin_balance = coin_balance - 5 WHERE id = v_u7;
   ASSERT (SELECT count(*) FROM wallet_consistency_report()) = 0, 'report empty after fix';
