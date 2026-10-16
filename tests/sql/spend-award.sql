@@ -7,7 +7,7 @@ INSERT INTO auth.users (id, email) VALUES
 INSERT INTO games (id, slug, title, game_url) VALUES
   ('99999999-9999-4999-8999-999999999999', 'g1', 'G1', 'https://g1.test'),
   ('88888888-8888-4888-8888-888888888888', 'g2', 'G2', 'https://g2.test');
-UPDATE profiles SET coin_balance = 100 WHERE id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+UPDATE profiles SET coin_balance = 100, promo_balance = 100 WHERE id = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
 DO $$
 DECLARE
