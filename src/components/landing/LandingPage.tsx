@@ -18,7 +18,7 @@ export default function LandingPage() {
     setLoading(true)
     setError('')
 
-    if (!email || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email)) {
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       setError('Please enter a valid email address.')
       setLoading(false)
       return
