@@ -7,7 +7,7 @@ export const metadata: Metadata = {
   description: 'Privacy Policy for HowGamersGame. Learn how we collect, use, and protect your data.',
 }
 
-const LAST_UPDATED = 'June 16, 2025'
+const LAST_UPDATED = 'October 16, 2026'
 
 export default function PrivacyPage() {
   return (
@@ -72,8 +72,9 @@ You can instruct your browser to refuse all cookies or to indicate when a cookie
           },
           {
             title: '6. DATA SHARING & DISCLOSURE',
-            body: `We do not sell, trade, or rent your personal information to third parties. We may share your information with:
+            body: `We do not sell, trade, or rent your personal information to third parties. Sharing your player ID and coin spend records with the developer of a game you play is described below. We may share your information with:
 • Service providers who assist us in operating the website (Supabase for database/auth, Stripe for payments, Vercel for hosting)
+• Developers of the games you play on HowGamersGame. When you open a game, the game's developer receives your player ID (it is added to the game's web address), and the developer receives a record of the coins you spend in that game (the amount, the time and the reason shown to you). Developers use this to run their game and to calculate what we owe them. We do not give developers your email address or your payment card details.
 • Law enforcement or government agencies when required by law
 • Successor entities in the event of a merger or acquisition
 
