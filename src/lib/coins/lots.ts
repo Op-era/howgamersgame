@@ -117,7 +117,7 @@ export function lotNetCents(grossCents: number, deductions: Deduction[]): number
     if (d.amountCents <= 0) throw new Error('invalid_amount')
     total -= BigInt(d.amountCents)
   }
-  return total < 0n ? 0 : Number(total)
+  return total < BigInt(0) ? 0 : Number(total)
 }
 
 export function allocationNetCents(
@@ -141,7 +141,7 @@ export function developerShareCents(netCents: number, shareBps = 6500): number {
   if (typeof shareBps !== 'number' || !Number.isSafeInteger(shareBps) || shareBps < 0 || shareBps > 10000) {
     throw new Error('invalid_share_bps')
   }
-  return Number((BigInt(netCents) * BigInt(shareBps)) / 10000n)
+  return Number((BigInt(netCents) * BigInt(shareBps)) / BigInt(10000))
 }
 
 export function developerEarnings(

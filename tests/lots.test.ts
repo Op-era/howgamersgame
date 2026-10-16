@@ -75,7 +75,7 @@ test('allocateSpend: promo first, then lots by purchasedAt and id', () => {
     assert.deepEqual(r1.allocations, [{ source: 'promo', lotId: null, coins: 60, coinsOffset: null, valueCents: 0 }])
   }
 
-  const r2 = allocateSpend({ promoBalance: 40, lots: [lot1, lot2], amount: 100 })
+  const r2 = allocateSpend({ promoBalance: 40, lots: r1.status === 'ok' ? r1.lots : [lot1, lot2], amount: 100 })
   assert.equal(r2.status, 'ok')
   if (r2.status === 'ok') {
     assert.equal(r2.promoSpent, 40)
@@ -85,7 +85,7 @@ test('allocateSpend: promo first, then lots by purchasedAt and id', () => {
     assert.equal(r2.lots.find((l) => l.id === 'lot-b')?.coinsRemaining, 490)
   }
 
-  const r3 = allocateSpend({ promoBalance: 0, lots: [lot1, lot2], amount: 600 })
+  const r3 = allocateSpend({ promoBalance: 0, lots: r2.status === 'ok' ? r2.lots : [lot1, lot2], amount: 600 })
   assert.equal(r3.status, 'ok')
   if (r3.status === 'ok') {
     assert.deepEqual(r3.allocations[0], { source: 'paid', lotId: 'lot-b', coins: 490, coinsOffset: 60, valueCents: 446 })
@@ -176,7 +176,7 @@ test('developerEarnings: deductions split across games', () => {
     grossCents: 500,
   }
   const r1 = allocateSpend({ promoBalance: 100, lots: [lot], amount: 400 })
-  const r2 = allocateSpend({ promoBalance: 0, lots: [lot], amount: 250 })
+  const r2 = allocateSpend({ promoBalance: 0, lots: r1.status === 'ok' ? r1.lots : [lot], amount: 250 })
   assert.equal(r1.status, 'ok')
   assert.equal(r2.status, 'ok')
   if (r1.status !== 'ok' || r2.status !== 'ok') return
@@ -252,7 +252,7 @@ test('developerEarnings: chargeback, partial refund, and capped refund', () => {
     id: 'lot-2',
     purchasedAt: new Date().toISOString(),
     coinsTotal: 550,
-    coinsRemaining: 550,
+    coinsRemaining: 440,
     coinsVoided: 110,
     grossCents: 500,
   }
@@ -273,7 +273,7 @@ test('developerEarnings: chargeback, partial refund, and capped refund', () => {
     id: 'lot-3',
     purchasedAt: new Date().toISOString(),
     coinsTotal: 550,
-    coinsRemaining: 550,
+    coinsRemaining: 440,
     coinsVoided: 110,
     grossCents: 500,
   }
