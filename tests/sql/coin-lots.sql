@@ -16,7 +16,9 @@ INSERT INTO auth.users (id, email) VALUES
 INSERT INTO games (id, slug, title, game_url) VALUES
   ('10101010-1010-4010-8010-101010101010', 'cl1', 'CL1', 'https://cl1.test'),
   ('20202020-2020-4020-8020-202020202020', 'cl2', 'CL2', 'https://cl2.test'),
-  ('30303030-3030-4030-8030-303030303030', 'cl3', 'CL3', 'https://cl3.test');
+  ('30303030-3030-4030-8030-303030303030', 'cl3', 'CL3', 'https://cl3.test'),
+  ('40404040-4040-4040-8040-404040404040', 'cl4', 'CL4', 'https://cl4.test'),
+  ('50505050-5050-4050-8050-505050505050', 'cl5', 'CL5', 'https://cl5.test');
 
 -- Helper: run a statement as a role and require insufficient_privilege.
 CREATE FUNCTION pg_temp.must_fail(role_name text, stmt text) RETURNS void LANGUAGE plpgsql AS $$
@@ -185,8 +187,8 @@ END $$;
 DO $$
 DECLARE
   v_u3 uuid := 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
-  v_g1 uuid := '10101010-1010-4010-8010-101010101010';
-  v_g2 uuid := '20202020-2020-4020-8020-202020202020';
+  v_g1 uuid := '40404040-4040-4040-8040-404040404040';
+  v_g2 uuid := '50505050-5050-4050-8050-505050505050';
   v_rev uuid;
   v_r jsonb;
   v_earnings record;
@@ -204,10 +206,10 @@ BEGIN
   v_r := record_purchase_deduction(v_rev, 'processing_fee', 30, 'fee-1');
   ASSERT v_r->>'status' = 'recorded', 'fee: ' || v_r;
 
-  FOR v_earnings IN SELECT * FROM developer_earnings(NULL, NULL, NULL, 6500) ORDER BY game_id LOOP
+  FOR v_earnings IN SELECT * FROM developer_earnings(NULL, NULL, NULL, 6500) WHERE game_id IN (v_g1, v_g2) ORDER BY game_id LOOP
     IF v_earnings.game_id = v_g1 THEN
-      ASSERT v_earnings.paid_coins_spent = 2050, 'g1 paid: ' || v_earnings.paid_coins_spent;
-      ASSERT v_earnings.promo_coins_spent = 200, 'g1 promo: ' || v_earnings.promo_coins_spent;
+      ASSERT v_earnings.paid_coins_spent = 300, 'g1 paid: ' || v_earnings.paid_coins_spent;
+      ASSERT v_earnings.promo_coins_spent = 100, 'g1 promo: ' || v_earnings.promo_coins_spent;
       ASSERT v_earnings.gross_paid_value_cents = 272, 'g1 gross: ' || v_earnings.gross_paid_value_cents;
       ASSERT v_earnings.net_paid_value_cents = 234, 'g1 net: ' || v_earnings.net_paid_value_cents;
       ASSERT v_earnings.developer_share_cents = 152, 'g1 share: ' || v_earnings.developer_share_cents;
@@ -221,7 +223,7 @@ BEGIN
       v_g2_net := v_earnings.net_paid_value_cents;
     END IF;
   END LOOP;
-  ASSERT v_g1_net + v_g2_net = 430, 'net sum: ' || (v_g1_net + v_g2_net);
+  ASSERT (SELECT COALESCE(SUM(net_paid_value_cents), 0) FROM developer_earnings(NULL, NULL, NULL, 6500) WHERE game_id IN (v_g1, v_g2)) = 430, 'net sum';
 
   v_r := record_purchase_deduction(v_rev, 'tax', 40, 'tax-1');
   ASSERT v_r->>'status' = 'duplicate', 'duplicate: ' || v_r;
