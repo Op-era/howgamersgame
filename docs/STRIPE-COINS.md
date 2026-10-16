@@ -111,7 +111,7 @@ Do **only** with Shane's go-ahead. Costs $5 plus Stripe's fee, refundable.
    -- promo_balance + the coins left in the user's lots, and record_purchase_deduction keeps that true.
    -- 1. Find the purchase (revenue event id) of the test charge:
    select id, user_id, gross_cents, coins_credited from revenue_events
-    where stripe_checkout_session_id = '<cs_live_... of the test>' and event_type = 'purchase';
+    where stripe_checkout_session_id = '<cs_live_... of the test>' and event_type = 'coin_purchase';
    -- 2. Record the refund and take back the unspent coins (service role only; safe to run twice with the same ref):
    select record_purchase_deduction('<REVENUE_EVENT_ID>', 'refund', 500, 'manual_refund_<ANY_UNIQUE_STRING>', 550, 'Manual reversal of live test purchase');
    -- 3. Check the wallet still adds up (expect zero rows):
