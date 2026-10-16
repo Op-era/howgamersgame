@@ -7,8 +7,6 @@
 --   * Free promo coins expire 30 days after EACH grant (including the starter
 --     grant). Promo coins are tracked per grant in promo_grants.
 --     30 days is implemented as exactly 720 hours (no daylight saving dependence).
---     30 days is implemented as exactly 720 hours (no daylight saving dependence).
---     30 days is implemented as exactly 720 hours (no daylight saving dependence).
 --     profiles.promo_balance stays as the DERIVED total = sum of
 --     coins_remaining of grants that are not swept (swept_at IS NULL).
 --     Invariant stays coin_balance = promo_balance + sum(coin_lots.coins_remaining).
