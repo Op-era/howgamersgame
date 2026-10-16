@@ -564,6 +564,9 @@ CREATE INDEX IF NOT EXISTS idx_game_api_keys_hash ON game_api_keys(key_hash);
 --   * Net Paid Coin Value = gross paid value minus taxes, processing fees,
 --     refunds or chargebacks only. Free promotional coins pay developers nothing.
 --   * Every spend is recorded against the exact lots it consumed.
+--   * coins_offset counts coins already spent from the lot (voided coins
+--     excluded); coins_voided tracks refunded or charged-back coins removed
+--     from the lot.
 --
 -- Backfill assumption: before this migration there was no promo/paid split,
 -- so each existing balance is split by replaying the free-first rule in
@@ -618,11 +621,16 @@ CREATE TABLE IF NOT EXISTS coin_lots (
   revenue_event_id UUID NOT NULL UNIQUE REFERENCES revenue_events(id) ON DELETE RESTRICT,
   coins_total     INTEGER NOT NULL CHECK (coins_total > 0),
   coins_remaining INTEGER NOT NULL CHECK (coins_remaining >= 0 AND coins_remaining <= coins_total),
+  coins_voided    INTEGER NOT NULL DEFAULT 0 CHECK (coins_voided >= 0),
   gross_cents     INTEGER NOT NULL CHECK (gross_cents >= 0),
   currency        TEXT NOT NULL,
   purchased_at    TIMESTAMPTZ NOT NULL,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CHECK (coins_remaining + coins_voided <= coins_total)
 );
+
+ALTER TABLE coin_lots
+  ADD COLUMN IF NOT EXISTS coins_voided INTEGER NOT NULL DEFAULT 0 CHECK (coins_voided >= 0);
 
 CREATE INDEX IF NOT EXISTS idx_coin_lots_user_purchased_remaining
   ON coin_lots(user_id, purchased_at, id)
@@ -957,7 +965,7 @@ BEGIN
   LOOP
     EXIT WHEN v_need = 0;
     v_take := LEAST(v_lot.coins_remaining, v_need);
-    v_offset := v_lot.coins_total - v_lot.coins_remaining;
+    v_offset := v_lot.coins_total - v_lot.coins_remaining - v_lot.coins_voided;
     v_value := coin_value_slice(v_lot.coins_total, v_lot.gross_cents, v_offset, v_take);
 
     INSERT INTO coin_spend_allocations
@@ -1123,7 +1131,8 @@ BEGIN
   v_void := CASE WHEN v_lot.user_id IS NULL THEN 0 ELSE LEAST(p_void_coins, v_lot.coins_remaining) END;
   IF v_void > 0 THEN
     UPDATE coin_lots
-       SET coins_remaining = coins_remaining - v_void
+       SET coins_remaining = coins_remaining - v_void,
+           coins_voided = coins_voided + v_void
      WHERE id = v_lot.id;
 
     UPDATE profiles
@@ -1189,6 +1198,7 @@ BEGIN
              a.lot_id,
              a.coins_offset,
              l.coins_total,
+             l.coins_voided,
              l.gross_cents,
              l.revenue_event_id
         FROM coin_spend_allocations a
@@ -1210,7 +1220,11 @@ BEGIN
            COALESCE(SUM(a.value_cents) FILTER (WHERE a.source = 'paid'), 0) AS gross_value,
            COALESCE(SUM(
              CASE WHEN a.source = 'paid' THEN
-               coin_value_slice(a.coins_total, ln.net_cents::INTEGER, a.coins_offset, a.coins)
+               CASE WHEN a.coins_voided > 0 THEN
+                 LEAST(a.value_cents, coin_value_slice(a.coins_total - a.coins_voided, ln.net_cents::INTEGER, a.coins_offset, a.coins))
+               ELSE
+                 coin_value_slice(a.coins_total, ln.net_cents::INTEGER, a.coins_offset, a.coins)
+               END
              ELSE 0 END
            ), 0) AS net_value
       FROM allocs a
