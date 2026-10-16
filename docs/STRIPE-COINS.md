@@ -34,12 +34,13 @@ Set in the hosting environment (Fly secrets or equivalent). Never commit values.
 
 ## Database setup (Supabase SQL Editor)
 
-Run all files **in this order** (the fourth, `f`, is NOT applied anywhere yet; it needs Shane's go-ahead). All are safe to re-run. For a brand new database, `schema.sql` already contains them (regenerate with `python3 scripts/sync-schema.py` after editing a migration).
+Run all files **in this order** (the fourth and fifth, `f` and `g`, are NOT applied anywhere yet; they need Shane's go-ahead). All are safe to re-run. For a brand new database, `schema.sql` already contains them (regenerate with `python3 scripts/sync-schema.py` after editing a migration).
 
 1. `src/lib/supabase/migrations/2026-10-04-a-coin-purchase-ledger.sql`: `stripe_events`, `revenue_events` (append only, includes terms version and acceptance time), the `stripe_checkout_session_id` column, and `credit_coin_purchase()`.
 2. `src/lib/supabase/migrations/2026-10-04-b-wallet-protection.sql` (**required, not optional**): players can never change their own coins.
 3. `src/lib/supabase/migrations/2026-10-04-c-spend-award.sql`: atomic, idempotent `spend_coins()` and `award_coins()`, and the `idempotency_key` ledger column.
 4. `src/lib/supabase/migrations/2026-10-15-f-coin-lots.sql`: free promo coins versus paid coin lots, spend allocations, purchase deductions, and the rewritten `spend_coins()` / `award_coins()` / `credit_coin_purchase()`. See the lots section below.
+5. `src/lib/supabase/migrations/2026-10-16-g-promo-grants.sql`: per grant free coins (`promo_grants`) that expire 30 days after each grant, the append-only `promo_expirations` log, `expire_promo_coins()`, `grant_starter_coins()`, and paid-first `spend_coins()`. See the promo grants section below.
 
 **Run order warning:** deploy the code only after all of them are applied. The new routes call functions that do not exist before the migrations, and `/store` needs `revenue_events`.
 
@@ -144,11 +145,22 @@ Refund reversal is **not implemented** (by decision): the app never takes coins 
 
 - **Free promo coins** are held in `profiles.promo_balance` and are worth nothing to developers. **Paid coins** live in `coin_lots`: one lot per purchase, linked to its `revenue_events` row. A lot's coins include bonus coins, so each paid coin is worth the price paid divided by the coins received (for example 500 cents for 550 coins).
 - Invariant: `coin_balance = promo_balance + sum(coin_lots.coins_remaining)`. `wallet_consistency_report()` lists any user where this is false.
-- `spend_coins()` takes free promo coins first, then paid coins from the oldest purchase first. It locks the wallet row and the lots (`FOR UPDATE`), so concurrent spends cannot overspend, and records each lot it used in `coin_spend_allocations` (coins, value in cents). Values are whole cents, split with a cumulative floor so rounding never drifts.
-- `award_coins()` adds promo coins only. `/api/coins/award` currently returns 403 by policy, so promo coins exist only if awards are re-enabled or from the backfill.
+- `spend_coins()` takes paid coins first (oldest purchase first, bonus coins included), then free promo grants, soonest-expiring first (order changed 2026-10-16, migration g; expired grants are never spent, even before the nightly sweep). It locks the wallet row and the lots (`FOR UPDATE`), so concurrent spends cannot overspend, and records each lot it used in `coin_spend_allocations` (coins, value in cents). Values are whole cents, split with a cumulative floor so rounding never drifts.
+- `award_coins()` adds promo coins only: one `promo_grants` row per award, capped at 1,000 coins per call. `/api/coins/award` currently returns 403 by policy, so promo coins exist only if awards are re-enabled or from the backfill.
 - `record_purchase_deduction(revenue_event_id, kind, amount_cents, external_ref, void_coins, note)` records a tax, processing fee, refund or chargeback against a purchase (kind is `tax`, `processing_fee`, `refund` or `chargeback`; the same kind and external_ref twice is ignored). For a refund or chargeback, `void_coins` removes that many unspent coins from the lot and from the balance. It is service role only and nothing calls it yet.
 - `developer_earnings(game_id, from, to, share_bps)` reports, per game, the paid coins spent, their gross value, the net value (gross minus deductions on the purchases they came from) and the developer share (65% of net by default). Promo coins pay nothing.
 - The migration's backfill converts each existing balance: coins matching a purchase become lot coins (newest purchases hold what is left), anything else becomes promo. Rollback: restore `credit_coin_purchase`, `spend_coins`, `award_coins` and `protect_wallet_columns` from migrations a, b and c, then drop the new tables; `coin_balance` is never changed by the migration.
+
+## Promo grants, expiry and starter coins (migration 2026-10-16-g-promo-grants.sql)
+
+- **Paid coins never expire.** `coin_lots` has no expiry column; bonus coins are part of the lot and never expire either.
+- **Free promo coins expire 30 days after each grant**, including the starter grant. Each grant is a row in `promo_grants` (`coins_granted`, `coins_remaining`, `granted_at`, `expires_at`, `source` of `award`, `starter` or `grandfather`). 30 days is stored as exactly 720 hours so daylight saving never changes it. `profiles.promo_balance` stays as the derived total of the grants not yet swept, so the invariant is still `coin_balance = promo_balance + sum(coin_lots.coins_remaining)`.
+- **Spend order: paid lots first** (oldest purchase first), **then promo grants, soonest-expiring first.** `coin_spend_allocations` rows for promo coins carry `promo_grant_id`. Promo allocations are always worth 0 cents to developers.
+- **Nightly sweep:** `expire_promo_coins(now)` locks the profile row, then its expired grants, zeroes them, writes one `promo_expirations` row per grant (append-only) and lowers `promo_balance` and `coin_balance`. It is idempotent. Vercel Cron calls `GET /api/cron/expire-promo` at 10:15 UTC every day (`vercel.json`); the route needs the `CRON_SECRET` environment variable in Vercel and answers 503 without it, 401 for a wrong secret. Until a sweep runs, expired coins still show in `coin_balance` but cannot be spent.
+- **Starter grant:** every NEW account gets 150 promo coins (3 power ups at 50 coins each; the price is hard coded in `public/games/snake/index.html` and mirrored in `src/lib/coins/starter.ts`), once per account (`profiles.starter_granted_at`), through `grant_starter_coins()` which uses the same `create_promo_grant()` path as `award_coins()`. `ensureUser()` calls it only when it creates a new user; existing accounts get nothing. Note the older policy line "coins only enter via Stripe purchases" now has this one exception.
+- **Grandfather rule:** when migration g runs, each existing `promo_balance` becomes one grant that expires 30 days after the migration run.
+- **Earnings example** (tested in `tests/lots.test.ts`): 100 paid coins bought for $2.00 and 30 promo coins, spend 50. Old promo-first order: 30 promo + 20 paid, paid value 40 cents, developer share 26 cents. New paid-first order: 50 paid, paid value 100 cents, developer share 65 cents.
+- Rollback of g: drop `promo_expirations` and `promo_grants`, drop `coin_spend_allocations.promo_grant_id` and `profiles.starter_granted_at`, and restore `spend_coins`, `award_coins` and `wallet_consistency_report` from migration f. `coin_balance` is untouched.
 
 ## Tests
 
