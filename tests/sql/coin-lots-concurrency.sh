@@ -39,7 +39,7 @@ echo "PASS: 100 parallel spends -> 92 applied, 8 insufficient, balance 10, promo
 
 # 2. DUPLICATE DEDUCTIONS
 for i in $(seq 1 12); do $Q -c "select record_purchase_deduction('$lot1','tax',40,'tax-par-$$')" > /tmp/ccl_$$_b_$i.out 2>&1 & done; wait
-rec=$(count b recorded); dup=$(count b duplicate); rows=$($Q -c "select count(*) from purchase_deductions where revenue_event_id='$lot1' and deduction_ref='tax-par-$$'")
+rec=$(count b recorded); dup=$(count b duplicate); rows=$($Q -c "select count(*) from purchase_deductions where revenue_event_id='$lot1' and external_ref='tax-par-$$'")
 [ "$rec" = 1 ] && [ "$dup" = 11 ] && [ "$rows" = 1 ] || fail "duplicate deductions recorded=$rec duplicate=$dup rows=$rows"
 echo "PASS: 12 parallel duplicate deductions -> 1 recorded, 11 duplicate"
 
