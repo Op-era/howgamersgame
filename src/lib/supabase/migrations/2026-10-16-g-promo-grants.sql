@@ -6,6 +6,9 @@
 --   * Paid coin lots never expire.
 --   * Free promo coins expire 30 days after EACH grant (including the starter
 --     grant). Promo coins are tracked per grant in promo_grants.
+--     30 days is implemented as exactly 720 hours (no daylight saving dependence).
+--     30 days is implemented as exactly 720 hours (no daylight saving dependence).
+--     30 days is implemented as exactly 720 hours (no daylight saving dependence).
 --     profiles.promo_balance stays as the DERIVED total = sum of
 --     coins_remaining of grants that are not swept (swept_at IS NULL).
 --     Invariant stays coin_balance = promo_balance + sum(coin_lots.coins_remaining).
@@ -46,7 +49,7 @@ CREATE TABLE IF NOT EXISTS promo_grants (
   coin_transaction_id UUID REFERENCES coin_transactions(id) ON DELETE SET NULL,
   swept_at           TIMESTAMPTZ,
   created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CHECK (expires_at = granted_at + INTERVAL '30 days')
+  CHECK (expires_at = granted_at + INTERVAL '720 hours')
 );
 
 CREATE INDEX IF NOT EXISTS idx_promo_grants_user_expires
@@ -155,7 +158,7 @@ BEGIN
     (user_id, coins_granted, coins_remaining, granted_at, expires_at,
      source, reason, coin_transaction_id)
   VALUES
-    (p_user_id, p_amount, p_amount, NOW(), NOW() + INTERVAL '30 days',
+    (p_user_id, p_amount, p_amount, NOW(), NOW() + INTERVAL '720 hours',
      p_source, p_reason, v_tx_id);
 
   RETURN v_balance;
@@ -443,7 +446,8 @@ BEGIN
      ORDER BY user_id
   LOOP
     -- Lock profile first
-    IF NOT EXISTS (SELECT 1 FROM profiles WHERE id = u FOR UPDATE) THEN
+    PERFORM 1 FROM profiles WHERE id = u FOR UPDATE;
+    IF NOT FOUND THEN
       CONTINUE;
     END IF;
 
@@ -463,14 +467,14 @@ BEGIN
         VALUES
           (g.id, u, g.coins_remaining, g.expires_at, p_now);
 
-        UPDATE promo_grants
-           SET coins_remaining = 0,
-               swept_at = p_now
-         WHERE id = g.id;
-
         v_total := v_total + g.coins_remaining;
         v_grants := v_grants + 1;
       END IF;
+
+      UPDATE promo_grants
+         SET coins_remaining = 0,
+             swept_at = p_now
+       WHERE id = g.id;
     END LOOP;
 
     IF v_total > 0 THEN
@@ -550,7 +554,7 @@ BEGIN
          p.promo_balance,
          p.promo_balance,
          NOW(),
-         NOW() + INTERVAL '30 days',
+         NOW() + INTERVAL '720 hours',
          'grandfather',
          'Grandfathered promo balance'
     FROM profiles p
