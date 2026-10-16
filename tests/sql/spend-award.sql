@@ -59,8 +59,8 @@ BEGIN
   ASSERT r->>'status' = 'ok', 'spend with award key: ' || r;
   BEGIN PERFORM award_coins(u1, g1, 51, 'x', 'k-award-1'); ASSERT false; EXCEPTION WHEN raise_exception THEN ASSERT SQLERRM = 'idempotency_key_conflict'; END;
   -- caps
-  BEGIN PERFORM award_coins(u1, g1, 10001, 'x', NULL); ASSERT false; EXCEPTION WHEN raise_exception THEN ASSERT SQLERRM = 'invalid_amount'; END;
-  r := award_coins(u1, g1, 10000, 'max', NULL);
+  BEGIN PERFORM award_coins(u1, g1, 1001, 'x', NULL); ASSERT false; EXCEPTION WHEN raise_exception THEN ASSERT SQLERRM = 'invalid_amount'; END;
+  r := award_coins(u1, g1, 1000, 'max', NULL);
   ASSERT r->>'status' = 'ok', 'max award';
   BEGIN PERFORM award_coins(u1, g1, 0, 'x', NULL); ASSERT false; EXCEPTION WHEN raise_exception THEN ASSERT SQLERRM = 'invalid_amount'; END;
   BEGIN PERFORM award_coins('cccccccc-cccc-4ccc-8ccc-cccccccccccc', g1, 5, 'x', NULL); ASSERT false; EXCEPTION WHEN raise_exception THEN ASSERT SQLERRM = 'user_not_found'; END;

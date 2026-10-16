@@ -62,7 +62,7 @@ Only the service role key (server routes), the SECURITY DEFINER functions, and t
 - **Who can call:** only a holder of a valid, active game API key. Admins create keys per game, and the key must stay on the game's server. Players have no key and cannot read or create one (see wallet protection). The SQL functions themselves are executable by `service_role` only.
 - **Idempotency:** send `Idempotency-Key: <unique per operation>` (or `idempotencyKey` in the body). The first call applies; a retry with the same key returns the original result with `"replayed": true` and changes nothing. Keys are scoped per game and per spend/award. The same key with a different user or amount returns `409`.
 - The key is **optional by default so existing games keep working**, but without one a retry is a new spend. Set `COINS_REQUIRE_IDEMPOTENCY_KEY=true` to make it mandatory once games send it.
-- Limits: award max 10,000 per call (also enforced in SQL), spend max 1,000,000 per call, whole numbers only.
+- Limits: award max 1,000 per call (also enforced in SQL; lowered from 10,000 on 2026-10-16), spend max 1,000,000 per call, whole numbers only.
 - Spends and awards are recorded in `coin_transactions` (type `spend` / `award`, with `game_id`), which is the wallet ledger. `revenue_events` stays purchase revenue only. Developer revenue share can be computed from `spend` rows by `game_id`.
 - Changed responses: `409` now means idempotency key conflict (it used to mean "concurrent update, retry", which can no longer happen).
 
@@ -123,7 +123,7 @@ Do **only** with Shane's go-ahead. Costs $5 plus Stripe's fee, refundable.
 
 - **Refunds and chargebacks** do not claw back coins or write ledger rows, by decision (see the terms section). `revenue_events` allows `refund` / `chargeback` types for later. Watch the Stripe Dashboard for disputes; a lost dispute costs money plus a fee.
 - Paid and free coins are now tracked as lots (see the lots section below), but the Stripe webhook does not yet call record_purchase_deduction, so taxes, processing fees, refunds and chargebacks are not recorded automatically; until it is wired, developer earnings are overstated by those amounts. Spends made before the lots migration have no allocations, so their developer earnings cannot be computed from lots.
-- Games can award up to 10,000 coins per call with no daily cap per game or per player. Consider caps before opening the API to outside developers.
+- Games can award up to 1,000 coins per call with no daily cap per game or per player (the award API is disabled by policy anyway). Consider caps before opening the API to outside developers.
 - `verifyGameApiKey` accepts keys of games that are marked inactive.
 - Other emails (`sendConfirmationEmail`, password reset) still interpolate `displayName` into HTML without escaping.
 - Connect/payouts, subscriptions, and ad-watch rewards are intentionally not touched. Terms section 5 still describes subscriptions that do not exist yet.

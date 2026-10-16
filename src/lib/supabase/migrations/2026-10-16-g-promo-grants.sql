@@ -16,6 +16,7 @@
 --     expires_at <= NOW() or swept_at IS NOT NULL even if not yet swept.
 --   * Grandfather rule: existing promo_balance at migration time becomes one
 --     promo grant with source 'grandfather' and a fresh 30-day expiry.
+--   * award_coins is capped at 1,000 coins per call (was 10,000).
 --   * This migration is not applied anywhere yet.
 --
 -- Rollback: drop promo_expirations and promo_grants, drop column
@@ -187,7 +188,7 @@ DECLARE
   v_existing coin_transactions%ROWTYPE;
 BEGIN
   IF p_user_id IS NULL OR p_game_id IS NULL THEN RAISE EXCEPTION 'missing_ids'; END IF;
-  IF p_amount IS NULL OR p_amount <= 0 OR p_amount > 10000 THEN RAISE EXCEPTION 'invalid_amount'; END IF;
+  IF p_amount IS NULL OR p_amount <= 0 OR p_amount > 1000 THEN RAISE EXCEPTION 'invalid_amount'; END IF;
 
   SELECT coin_balance INTO v_balance FROM profiles WHERE id = p_user_id FOR UPDATE;
   IF NOT FOUND THEN RAISE EXCEPTION 'user_not_found'; END IF;

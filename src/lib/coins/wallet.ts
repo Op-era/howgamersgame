@@ -5,7 +5,7 @@
 export type WalletKind = 'spend' | 'award'
 
 export const MAX_SPEND_PER_CALL = 1_000_000
-export const MAX_AWARD_PER_CALL = 10_000
+export const MAX_AWARD_PER_CALL = 1_000
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const IDEMPOTENCY_KEY_RE = /^[A-Za-z0-9_.:-]{8,128}$/
