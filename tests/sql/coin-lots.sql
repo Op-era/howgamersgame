@@ -106,7 +106,8 @@ BEGIN
   v_r := spend_coins(v_u1, v_g1, 2000, 'spend', 'k1-spend-ddd');
   ASSERT v_r->>'status' = 'insufficient', 'insufficient: ' || v_r;
   ASSERT (SELECT coin_balance FROM profiles WHERE id = v_u1) = 1090, 'balance unchanged after insufficient';
-  ASSERT (SELECT coins_remaining FROM coin_lots WHERE id = v_lot2) = 1090, 'lot2 unchanged after insufficient';
+  ASSERT (SELECT coins_remaining FROM coin_lots WHERE id = v_lot2) = 990, 'lot2 unchanged after insufficient';
+  ASSERT (SELECT promo_balance FROM profiles WHERE id = v_u1) = 100, 'promo unchanged after insufficient';
 
   ASSERT (SELECT coins_total FROM coin_lots WHERE id = v_lot1) = 550, 'lot1 total includes bonus';
 END $$;
@@ -210,18 +211,18 @@ BEGIN
 
   FOR v_earnings IN SELECT * FROM developer_earnings(NULL, NULL, NULL, 6500) WHERE game_id IN (v_g1, v_g2) ORDER BY game_id LOOP
     IF v_earnings.game_id = v_g1 THEN
-      ASSERT v_earnings.paid_coins_spent = 300, 'g1 paid: ' || v_earnings.paid_coins_spent;
-      ASSERT v_earnings.promo_coins_spent = 100, 'g1 promo: ' || v_earnings.promo_coins_spent;
-      ASSERT v_earnings.gross_paid_value_cents = 272, 'g1 gross: ' || v_earnings.gross_paid_value_cents;
-      ASSERT v_earnings.net_paid_value_cents = 234, 'g1 net: ' || v_earnings.net_paid_value_cents;
-      ASSERT v_earnings.developer_share_cents = 152, 'g1 share: ' || v_earnings.developer_share_cents;
+      ASSERT v_earnings.paid_coins_spent = 400, 'g1 paid: ' || v_earnings.paid_coins_spent;
+      ASSERT v_earnings.promo_coins_spent = 0, 'g1 promo: ' || v_earnings.promo_coins_spent;
+      ASSERT v_earnings.gross_paid_value_cents = 363, 'g1 gross: ' || v_earnings.gross_paid_value_cents;
+      ASSERT v_earnings.net_paid_value_cents = 312, 'g1 net: ' || v_earnings.net_paid_value_cents;
+      ASSERT v_earnings.developer_share_cents = 202, 'g1 share: ' || v_earnings.developer_share_cents;
       v_g1_net := v_earnings.net_paid_value_cents;
     ELSIF v_earnings.game_id = v_g2 THEN
-      ASSERT v_earnings.paid_coins_spent = 250, 'g2 paid: ' || v_earnings.paid_coins_spent;
-      ASSERT v_earnings.promo_coins_spent = 0, 'g2 promo: ' || v_earnings.promo_coins_spent;
-      ASSERT v_earnings.gross_paid_value_cents = 228, 'g2 gross: ' || v_earnings.gross_paid_value_cents;
-      ASSERT v_earnings.net_paid_value_cents = 196, 'g2 net: ' || v_earnings.net_paid_value_cents;
-      ASSERT v_earnings.developer_share_cents = 127, 'g2 share: ' || v_earnings.developer_share_cents;
+      ASSERT v_earnings.paid_coins_spent = 150, 'g2 paid: ' || v_earnings.paid_coins_spent;
+      ASSERT v_earnings.promo_coins_spent = 100, 'g2 promo: ' || v_earnings.promo_coins_spent;
+      ASSERT v_earnings.gross_paid_value_cents = 137, 'g2 gross: ' || v_earnings.gross_paid_value_cents;
+      ASSERT v_earnings.net_paid_value_cents = 118, 'g2 net: ' || v_earnings.net_paid_value_cents;
+      ASSERT v_earnings.developer_share_cents = 76, 'g2 share: ' || v_earnings.developer_share_cents;
       v_g2_net := v_earnings.net_paid_value_cents;
     END IF;
   END LOOP;
