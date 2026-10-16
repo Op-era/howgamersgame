@@ -11,14 +11,16 @@ INSERT INTO auth.users (id, email) VALUES
   ('ffffffff-ffff-4fff-8fff-ffffffffffff', 'cl4@test.invalid'),
   ('11111111-1111-4111-8111-111111111111', 'cl5@test.invalid'),
   ('22222222-2222-4222-8222-222222222222', 'cl6@test.invalid'),
-  ('33333333-3333-4333-8333-333333333333', 'cl7@test.invalid');
+  ('33333333-3333-4333-8333-333333333333', 'cl7@test.invalid'),
+  ('44444444-4444-4444-8444-444444444444', 'cl8@test.invalid');
 
 INSERT INTO games (id, slug, title, game_url) VALUES
   ('10101010-1010-4010-8010-101010101010', 'cl1', 'CL1', 'https://cl1.test'),
   ('20202020-2020-4020-8020-202020202020', 'cl2', 'CL2', 'https://cl2.test'),
   ('30303030-3030-4030-8030-303030303030', 'cl3', 'CL3', 'https://cl3.test'),
   ('40404040-4040-4040-8040-404040404040', 'cl4', 'CL4', 'https://cl4.test'),
-  ('50505050-5050-4050-8050-505050505050', 'cl5', 'CL5', 'https://cl5.test');
+  ('50505050-5050-4050-8050-505050505050', 'cl5', 'CL5', 'https://cl5.test'),
+  ('60606060-6060-4060-8060-606060606060', 'cl6', 'CL6', 'https://cl6.test');
 
 -- Helper: run a statement as a role and require insufficient_privilege.
 CREATE FUNCTION pg_temp.must_fail(role_name text, stmt text) RETURNS void LANGUAGE plpgsql AS $$
@@ -269,8 +271,10 @@ DECLARE
   v_u4 uuid := 'ffffffff-ffff-4fff-8fff-ffffffffffff';
   v_u5 uuid := '11111111-1111-4111-8111-111111111111';
   v_u6 uuid := '22222222-2222-4222-8222-222222222222';
+  v_u8 uuid := '44444444-4444-4444-8444-444444444444';
   v_g1 uuid := '10101010-1010-4010-8010-101010101010';
   v_g3 uuid := '30303030-3030-4030-8030-303030303030';
+  v_g6 uuid := '60606060-6060-4060-8060-606060606060';
   v_rev uuid;
   v_r jsonb;
   v_earnings record;
@@ -309,6 +313,11 @@ BEGIN
   PERFORM spend_coins(v_u6, v_g3, 440, 'spend', 'k6-spend-aaa');
   SELECT * INTO v_earnings FROM developer_earnings(v_g3, NULL, NULL, 6500) WHERE game_id = v_g3;
   ASSERT v_earnings.net_paid_value_cents = 400, 'net 400 after partial refund';
+  ASSERT (SELECT coins_voided FROM coin_lots WHERE revenue_event_id = v_rev) = 110, 'u6 voided 110';
+  ASSERT (SELECT coins_remaining FROM coin_lots WHERE revenue_event_id = v_rev) = 0, 'u6 remaining 0';
+  ASSERT (SELECT coins_offset FROM coin_spend_allocations WHERE coin_transaction_id = (SELECT id FROM coin_transactions WHERE idempotency_key = 'k6-spend-aaa') AND source = 'paid') = 0, 'u6 offset 0';
+  ASSERT (SELECT value_cents FROM coin_spend_allocations WHERE coin_transaction_id = (SELECT id FROM coin_transactions WHERE idempotency_key = 'k6-spend-aaa') AND source = 'paid') = 400, 'u6 value 400';
+  ASSERT (SELECT count(*) FROM wallet_consistency_report()) = 0, 'wallet consistent after u6';
 
   BEGIN
     PERFORM record_purchase_deduction(v_rev, 'tax', 10, 'rf-7', 1);
@@ -322,6 +331,18 @@ BEGIN
   EXCEPTION WHEN raise_exception THEN
     ASSERT SQLERRM = 'lot_not_found', SQLERRM;
   END;
+
+  -- U8: partial refund smaller than voided coins' value caps net at gross
+  PERFORM credit_coin_purchase('evt_cl8','checkout.session.completed','cs_cl8','pi_cl8', v_u8, 'player', 550, 50, 500, 'usd', 'test');
+  SELECT revenue_event_id INTO v_rev FROM coin_lots WHERE user_id = v_u8;
+  v_r := record_purchase_deduction(v_rev, 'refund', 50, 'rf-9', 110);
+  ASSERT (v_r->>'voided_coins')::int = 110, 'u8 voided: ' || v_r;
+  PERFORM spend_coins(v_u8, v_g6, 440, 'spend', 'k8-spend-aaa');
+  SELECT * INTO v_earnings FROM developer_earnings(v_g6, NULL, NULL, 6500) WHERE game_id = v_g6;
+  ASSERT v_earnings.gross_paid_value_cents = 400, 'u8 gross: ' || v_earnings.gross_paid_value_cents;
+  ASSERT v_earnings.net_paid_value_cents = 400, 'u8 net: ' || v_earnings.net_paid_value_cents;
+  ASSERT v_earnings.developer_share_cents = 260, 'u8 share: ' || v_earnings.developer_share_cents;
+  ASSERT (SELECT count(*) FROM wallet_consistency_report()) = 0, 'wallet consistent after u8';
 END $$;
 
 -- ============================================================
