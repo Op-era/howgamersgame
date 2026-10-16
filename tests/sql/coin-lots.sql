@@ -67,34 +67,35 @@ BEGIN
 
   v_r := spend_coins(v_u1, v_g1, 60, 'spend', 'k1-spend-aaa');
   ASSERT v_r->>'status' = 'ok', 'spend 60: ' || v_r;
-  ASSERT (v_r->>'promo_spent')::bigint = 60, 'promo 60';
-  ASSERT (v_r->>'paid_spent')::bigint = 0, 'paid 0';
+  ASSERT (v_r->>'promo_spent')::bigint = 0, 'promo 0 after 60';
+  ASSERT (v_r->>'paid_spent')::bigint = 60, 'paid 60 of 60';
   SELECT count(*) INTO v_alloc_count FROM coin_spend_allocations WHERE coin_transaction_id = (SELECT id FROM coin_transactions WHERE idempotency_key = 'k1-spend-aaa');
   ASSERT v_alloc_count = 1, 'one allocation for 60';
-  ASSERT (SELECT source FROM coin_spend_allocations WHERE coin_transaction_id = (SELECT id FROM coin_transactions WHERE idempotency_key = 'k1-spend-aaa')) = 'promo', 'promo source';
-  ASSERT (SELECT value_cents FROM coin_spend_allocations WHERE coin_transaction_id = (SELECT id FROM coin_transactions WHERE idempotency_key = 'k1-spend-aaa')) = 0, 'promo value 0';
-  ASSERT (SELECT lot_id FROM coin_spend_allocations WHERE coin_transaction_id = (SELECT id FROM coin_transactions WHERE idempotency_key = 'k1-spend-aaa')) IS NULL, 'promo lot null';
-  ASSERT (SELECT promo_balance FROM profiles WHERE id = v_u1) = 40, 'promo after 60';
-  ASSERT (SELECT coins_remaining FROM coin_lots WHERE id = v_lot1) = 550, 'lot1 after 60';
+  ASSERT (SELECT source FROM coin_spend_allocations WHERE coin_transaction_id = (SELECT id FROM coin_transactions WHERE idempotency_key = 'k1-spend-aaa')) = 'paid', 'paid source';
+  ASSERT (SELECT value_cents FROM coin_spend_allocations WHERE coin_transaction_id = (SELECT id FROM coin_transactions WHERE idempotency_key = 'k1-spend-aaa')) = 54, 'value 54 for 60';
+  ASSERT (SELECT lot_id FROM coin_spend_allocations WHERE coin_transaction_id = (SELECT id FROM coin_transactions WHERE idempotency_key = 'k1-spend-aaa')) = v_lot1, 'lot1 id';
+  ASSERT (SELECT promo_balance FROM profiles WHERE id = v_u1) = 100, 'promo after 60';
+  ASSERT (SELECT coins_remaining FROM coin_lots WHERE id = v_lot1) = 490, 'lot1 after 60';
 
   v_r := spend_coins(v_u1, v_g1, 100, 'spend', 'k1-spend-bbb');
   ASSERT v_r->>'status' = 'ok', 'spend 100: ' || v_r;
-  ASSERT (v_r->>'promo_spent')::bigint = 40, 'promo 40';
-  ASSERT (v_r->>'paid_spent')::bigint = 60, 'paid 60';
-  ASSERT (SELECT count(*) FROM coin_spend_allocations WHERE coin_transaction_id = (SELECT id FROM coin_transactions WHERE idempotency_key = 'k1-spend-bbb')) = 2, 'two allocations for 100';
-  ASSERT (SELECT coins FROM coin_spend_allocations WHERE coin_transaction_id = (SELECT id FROM coin_transactions WHERE idempotency_key = 'k1-spend-bbb') AND source = 'paid') = 60, 'paid 60 coins';
-  ASSERT (SELECT coins_offset FROM coin_spend_allocations WHERE coin_transaction_id = (SELECT id FROM coin_transactions WHERE idempotency_key = 'k1-spend-bbb') AND source = 'paid') = 0, 'offset 0';
-  ASSERT (SELECT value_cents FROM coin_spend_allocations WHERE coin_transaction_id = (SELECT id FROM coin_transactions WHERE idempotency_key = 'k1-spend-bbb') AND source = 'paid') = 54, 'value 54';
-  ASSERT (SELECT coins_remaining FROM coin_lots WHERE id = v_lot1) = 490, 'lot1 after 100';
+  ASSERT (v_r->>'promo_spent')::bigint = 0, 'promo 0 after 100';
+  ASSERT (v_r->>'paid_spent')::bigint = 100, 'paid 100 of 100';
+  ASSERT (SELECT count(*) FROM coin_spend_allocations WHERE coin_transaction_id = (SELECT id FROM coin_transactions WHERE idempotency_key = 'k1-spend-bbb')) = 1, 'one allocation for 100';
+  ASSERT (SELECT coins FROM coin_spend_allocations WHERE coin_transaction_id = (SELECT id FROM coin_transactions WHERE idempotency_key = 'k1-spend-bbb') AND source = 'paid') = 100, 'paid 100 coins';
+  ASSERT (SELECT coins_offset FROM coin_spend_allocations WHERE coin_transaction_id = (SELECT id FROM coin_transactions WHERE idempotency_key = 'k1-spend-bbb') AND source = 'paid') = 60, 'offset 60';
+  ASSERT (SELECT value_cents FROM coin_spend_allocations WHERE coin_transaction_id = (SELECT id FROM coin_transactions WHERE idempotency_key = 'k1-spend-bbb') AND source = 'paid') = 91, 'value 91';
+  ASSERT (SELECT coins_remaining FROM coin_lots WHERE id = v_lot1) = 390, 'lot1 after 100';
 
   v_r := spend_coins(v_u1, v_g1, 600, 'spend', 'k1-spend-ccc');
   ASSERT v_r->>'status' = 'ok', 'spend 600: ' || v_r;
   ASSERT (v_r->>'promo_spent')::bigint = 0, 'promo 0 for 600';
   ASSERT (v_r->>'paid_spent')::bigint = 600, 'paid 600';
   ASSERT (SELECT coins_remaining FROM coin_lots WHERE id = v_lot1) = 0, 'lot1 empty';
-  ASSERT (SELECT coins_remaining FROM coin_lots WHERE id = v_lot2) = 1090, 'lot2 after 600: ' || (SELECT coins_remaining FROM coin_lots WHERE id = v_lot2);
+  ASSERT (SELECT coins_remaining FROM coin_lots WHERE id = v_lot2) = 990, 'lot2 after 600: ' || (SELECT coins_remaining FROM coin_lots WHERE id = v_lot2);
   SELECT COALESCE(SUM(value_cents), 0) INTO v_lot1_sum FROM coin_spend_allocations WHERE lot_id = v_lot1;
   ASSERT v_lot1_sum = 500, 'lot1 total value: ' || v_lot1_sum;
+  ASSERT (SELECT value_cents FROM coin_spend_allocations WHERE lot_id = v_lot2) = 175, 'lot2 slice 175';
 
   v_r := spend_coins(v_u1, v_g1, 600, 'spend', 'k1-spend-ccc');
   ASSERT v_r->>'status' = 'replayed', 'replay 600: ' || v_r;
@@ -441,19 +442,19 @@ BEGIN
   BEGIN
     PERFORM coin_value_slice(3, 100, 0, 4);
     RAISE EXCEPTION 'should have failed';
-  EXCEPTION WHEN raise_exception THEN
+  EXCEPTION WHEN OTHERS THEN
     ASSERT SQLERRM = 'invalid_slice', SQLERRM;
   END;
   BEGIN
     PERFORM coin_value_slice(3, 100, -1, 1);
     RAISE EXCEPTION 'should have failed';
-  EXCEPTION WHEN raise_exception THEN
+  EXCEPTION WHEN OTHERS THEN
     ASSERT SQLERRM = 'invalid_slice', SQLERRM;
   END;
   BEGIN
     PERFORM coin_value_slice(0, 100, 0, 1);
     RAISE EXCEPTION 'should have failed';
-  EXCEPTION WHEN raise_exception THEN
+  EXCEPTION WHEN OTHERS THEN
     ASSERT SQLERRM = 'invalid_slice', SQLERRM;
   END;
 END $$;
