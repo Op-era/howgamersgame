@@ -9,33 +9,57 @@ export default function LandingPage() {
   const router = useRouter()
   const [email, setEmail] = useState('')
   const [callsign, setCallsign] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
   const [mode, setMode] = useState<'signup' | 'login'>('signup')
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError('')
+    setNotice('')
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       setError('Please enter a valid email address.')
       setLoading(false)
       return
     }
+    if (password.length < 6) {
+      setError('Password must be at least 6 characters.')
+      setLoading(false)
+      return
+    }
 
     try {
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, displayName: callsign || undefined }),
-      })
-      const data = await res.json()
-      if (!res.ok) {
-        setError(data.error || 'Sign in failed. Please try again.')
+      if (mode === 'signup') {
+        const res = await fetch('/api/auth/signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, username: callsign || undefined }),
+        })
+        const data = await res.json()
+        if (!res.ok) {
+          setError(data.error || 'Sign up failed. Please try again.')
+        } else {
+          setNotice('Account created! Check your email to confirm, then log in.')
+          setMode('login')
+          setPassword('')
+        }
       } else {
-        router.push('/console')
-        router.refresh()
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password }),
+        })
+        const data = await res.json()
+        if (!res.ok) {
+          setError(data.error || 'Sign in failed. Please try again.')
+        } else {
+          router.push('/console')
+          router.refresh()
+        }
       }
     } catch {
       setError('Something went wrong. Please try again.')
@@ -108,7 +132,7 @@ export default function LandingPage() {
             <button
               key={m}
               type="button"
-              onClick={() => { setMode(m); setError('') }}
+              onClick={() => { setMode(m); setError(''); setNotice('') }}
               style={{
                 flex: 1,
                 padding: '10px 0',
@@ -142,7 +166,7 @@ export default function LandingPage() {
           textAlign: 'center',
           margin: '0 0 24px',
         }}>
-          {mode === 'signup' ? 'Sign up free to enter the console room' : 'Sign in with your email to keep playing'}
+          {mode === 'signup' ? 'Sign up free to enter the console room' : 'Sign in with your email and password to keep playing'}
         </p>
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -155,6 +179,28 @@ export default function LandingPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="you@example.com"
+              style={{
+                width: '100%',
+                padding: '12px',
+                fontSize: 14,
+                background: '#0a0a1e',
+                border: '1px solid #2a2a4a',
+                borderRadius: 6,
+                color: '#fff',
+                fontFamily: 'inherit',
+              }}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, letterSpacing: '0.1em', color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>
+              PASSWORD
+            </label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="At least 6 characters"
+              minLength={6}
               style={{
                 width: '100%',
                 padding: '12px',
@@ -195,6 +241,12 @@ export default function LandingPage() {
           {error && (
             <div style={{ color: '#ff5555', fontSize: 12, textAlign: 'center' }}>
               {error}
+            </div>
+          )}
+
+          {notice && (
+            <div style={{ color: 'var(--accent-green)', fontSize: 12, textAlign: 'center' }}>
+              {notice}
             </div>
           )}
 

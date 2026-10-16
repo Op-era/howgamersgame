@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
 import Navigation from '@/components/layout/Navigation'
 
 type Mode = 'signin' | 'signup' | 'reset'
@@ -16,7 +15,6 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
   const router = useRouter()
-  const supabase = createClient()
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -25,9 +23,14 @@ export default function LoginPage() {
     setNotice('')
 
     if (mode === 'signin') {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) {
-        setError(error.message)
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
+      const body = await res.json()
+      if (!res.ok) {
+        setError(body.error || 'Sign in failed')
       } else {
         router.push('/')
         router.refresh()
