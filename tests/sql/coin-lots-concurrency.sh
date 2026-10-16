@@ -38,8 +38,8 @@ lot1_total=$($Q -c "select coins_total from coin_lots where id='$lot1'"); lot2_t
 echo "PASS: 100 parallel spends -> 92 applied, 8 insufficient, balance 10, promo 0, allocations consistent"
 
 # 2. DUPLICATE DEDUCTIONS
-for i in $(seq 1 12); do $Q -c "select record_purchase_deduction('$lot1','tax',40,'tax-par-$$')" > /tmp/ccl_$$_b_$i.out 2>&1 & done; wait
-rec=$(count b recorded); dup=$(count b duplicate); rows=$($Q -c "select count(*) from purchase_deductions where revenue_event_id='$lot1' and external_ref='tax-par-$$'")
+for i in $(seq 1 12); do $Q -c "select record_purchase_deduction((select revenue_event_id from coin_lots where id='$lot1'),'tax',40,'tax-par-$$')" > /tmp/ccl_$$_b_$i.out 2>&1 & done; wait
+rec=$(count b recorded); dup=$(count b duplicate); rows=$($Q -c "select count(*) from purchase_deductions where revenue_event_id=(select revenue_event_id from coin_lots where id='$lot1') and external_ref='tax-par-$$'")
 [ "$rec" = 1 ] && [ "$dup" = 11 ] && [ "$rows" = 1 ] || fail "duplicate deductions recorded=$rec duplicate=$dup rows=$rows"
 echo "PASS: 12 parallel duplicate deductions -> 1 recorded, 11 duplicate"
 
@@ -49,7 +49,7 @@ $Q -c "select credit_coin_purchase('evt_ccl_b_$$','checkout.session.completed','
 $Q -c "update coin_lots set purchased_at = now() - interval '2 days' where revenue_event_id = (select id from revenue_events where stripe_event_id='evt_ccl_b_$$')"
 lotB=$($Q -c "select id from coin_lots where user_id='$B' and revenue_event_id=(select id from revenue_events where stripe_event_id='evt_ccl_b_$$')")
 for i in $(seq 1 30); do $Q -c "select spend_coins('$B','$G',10,'p','ccl_b_$i')" > /tmp/ccl_$$_c_s$i.out 2>&1 & done
-for j in $(seq 1 5); do $Q -c "select record_purchase_deduction('$lotB','chargeback',100,'cb-$j-$$',50)" > /tmp/ccl_$$_c_cb$j.out 2>&1 & done; wait
+for j in $(seq 1 5); do $Q -c "select record_purchase_deduction((select revenue_event_id from coin_lots where id='$lotB'),'chargeback',100,'cb-$j-$$',50)" > /tmp/ccl_$$_c_cb$j.out 2>&1 & done; wait
 if grep -il "deadlock\|ERROR" /tmp/ccl_$$_c_*.out >/dev/null 2>&1; then fail "deadlock or error in output"; fi
 wcr=$($Q -c "select count(*) from wallet_consistency_report() where user_id='$B'"); [ "$wcr" = 0 ] || fail "wallet_consistency_report rows=$wcr"
 bal=$($Q -c "select coin_balance from profiles where id='$B'"); [ "$bal" -ge 0 ] || fail "negative balance=$bal"
@@ -57,7 +57,7 @@ lot_rem=$($Q -c "select coins_remaining from coin_lots where id='$lotB'")
 lot_void=$($Q -c "select coins_voided from coin_lots where id='$lotB'")
 lot_alloc=$($Q -c "select coalesce(sum(coins),0) from coin_spend_allocations where lot_id='$lotB'")
 [ $((lot_rem + lot_void + lot_alloc)) = 550 ] || fail "lot invariant rem=$lot_rem void=$lot_void alloc=$lot_alloc"
-ded_total=$($Q -c "select coalesce(sum(amount_cents),0) from purchase_deductions where revenue_event_id='$lotB'")
+ded_total=$($Q -c "select coalesce(sum(amount_cents),0) from purchase_deductions where revenue_event_id=(select revenue_event_id from coin_lots where id='$lotB')")
 [ "$ded_total" = 500 ] || fail "deduction total=$ded_total"
 echo "PASS: spends racing voids -> no deadlock, wallet consistent, lot invariant holds, deductions 500"
 
