@@ -400,7 +400,7 @@ BEGIN
   DROP FUNCTION test_force_alloc_failure();
   ASSERT (SELECT coin_balance FROM profiles WHERE id = v_u7) = v_bal_before, 'balance unchanged after forced failure';
   ASSERT (SELECT coins_remaining FROM coin_lots WHERE revenue_event_id = v_rev) = v_lot_before, 'lot unchanged after forced failure';
-  ASSERT NOT EXISTS (SELECT 1 FROM coin_transactions WHERE idempotency_key = '<REDACTED>'), 'no ledger row after forced failure';
+  ASSERT NOT EXISTS (SELECT 1 FROM coin_transactions WHERE idempotency_key = 'k7-spend-bbb'), 'no ledger row after forced failure';
 
   UPDATE profiles SET coin_balance = coin_balance - 5 WHERE id = v_u7;
   ASSERT (SELECT count(*) FROM wallet_consistency_report()) = 0, 'report empty after fix';
