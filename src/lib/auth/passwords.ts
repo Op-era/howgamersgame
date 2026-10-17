@@ -75,7 +75,7 @@ const COMMON_PASSWORDS = [
 /**
  * Password hashing for player accounts (Fly Postgres users table).
  * scrypt from node:crypto with a per-password random salt.
- * Stored format: "scrypt2:<N>:<r>:<p>:<saltHex>:<hashHex>".
+ * Stored format: "scrypt2$<N>$<r>$<p>$<saltHex>$<hashHex>".
  * Legacy format: "scrypt:<saltHex>:<hashHex>" (node default cost).
  */
 export async function hashPassword(password: string): Promise<string> {
