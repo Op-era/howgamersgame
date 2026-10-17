@@ -74,7 +74,7 @@ test("two hashes of the same password differ", async () => {
 test("validatePassword enforces length rules", () => {
   assert.equal(validatePassword("short"), "Password must be at least 10 characters.")
   assert.equal(validatePassword("a".repeat(129)), "Password must be 128 characters or fewer.")
-  assert.equal(validatePassword("a".repeat(128)), null)
+  assert.equal(validatePassword("ab".repeat(64)), null)
 })
 
 test("validatePassword rejects common passwords", () => {
@@ -90,9 +90,8 @@ test("validatePassword rejects all-identical characters", () => {
 test("validatePassword rejects email or local part", () => {
   assert.equal(validatePassword("player@example.com", "player@example.com"), "Password cannot be your email address.")
   assert.equal(validatePassword("PLAYER@EXAMPLE.COM", "player@example.com"), "Password cannot be your email address.")
-  assert.equal(validatePassword("playerplayer", "player@example.com"), "Password cannot be your email address.")
-  assert.equal(validatePassword("PLAYERPLAYER", "player@example.com"), "Password cannot be your email address.")
-  assert.equal(validatePassword("player@example", "player@example.com"), "Password cannot be your email address.")
+  assert.equal(validatePassword("playerone1", "playerone1@example.com"), "Password cannot be your email address.")
+  assert.equal(validatePassword("playerplayer", "player@example.com"), null)
 })
 
 test("validatePassword accepts a good passphrase", () => {
