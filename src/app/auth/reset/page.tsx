@@ -22,8 +22,8 @@ function ResetForm() {
       setError("This reset link is invalid or has expired.")
       return
     }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.")
+    if (password.length < 10) {
+      setError("Password must be at least 10 characters.")
       return
     }
     if (password !== confirm) {
@@ -131,7 +131,7 @@ function ResetForm() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                minLength={6}
+                minLength={10}
                 placeholder="••••••••"
                 style={inputStyle}
               />
@@ -143,7 +143,7 @@ function ResetForm() {
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
                 required
-                minLength={6}
+                minLength={10}
                 placeholder="••••••••"
                 style={inputStyle}
               />

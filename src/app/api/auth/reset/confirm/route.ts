@@ -1,5 +1,5 @@
 import { query } from "@/lib/db/pg"
-import { hashPassword, hashToken } from "@/lib/auth/passwords"
+import { hashPassword, hashToken, validatePassword } from "@/lib/auth/passwords"
 import { NextResponse } from "next/server"
 
 /**
@@ -23,8 +23,9 @@ export async function POST(req: Request) {
   if (!token) {
     return NextResponse.json({ error: "This reset link is invalid or has expired." }, { status: 400 })
   }
-  if (password.length < 6) {
-    return NextResponse.json({ error: "Password must be at least 6 characters." }, { status: 400 })
+  const bad = validatePassword(password)
+  if (bad) {
+    return NextResponse.json({ error: bad }, { status: 400 })
   }
 
   const found = await query(
