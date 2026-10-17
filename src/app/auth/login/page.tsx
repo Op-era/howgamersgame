@@ -40,13 +40,13 @@ export default function LoginPage() {
       const res = await fetch('/api/auth/signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, username }),
+        body: JSON.stringify({ email, username }),
       })
       const body = await res.json()
       if (!res.ok) {
         setError(body.error || 'Signup failed')
       } else {
-        setNotice('Account created! Check your email to confirm, then sign in.')
+        setNotice('Check your email: we sent a link to confirm your address and choose your password.')
         setMode('signin')
         setPassword('')
       }
@@ -191,7 +191,7 @@ export default function LoginPage() {
                 />
               </div>
 
-              {mode !== 'reset' && (
+              {mode === 'signin' && (
                 <div>
                   <label style={labelStyle}>PASSWORD</label>
                   <input

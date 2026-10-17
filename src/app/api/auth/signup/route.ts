@@ -64,7 +64,7 @@ export async function POST(req: Request) {
           try {
             await fn()
           } catch (err) {
-            console.error("[signup] email failed", err)
+            console.error("[signup] email failed", err instanceof Error ? err.name : "error")
           }
         })
       },
