@@ -5,7 +5,7 @@ const scryptAsync = promisify(scrypt) as (
   password: string,
   salt: Buffer,
   keylen: number,
-  options: { N: number; r: number; p: number; maxmem: number }
+  options?: { N: number; r: number; p: number; maxmem: number }
 ) => Promise<Buffer>
 const KEYLEN = 64
 

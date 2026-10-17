@@ -10,7 +10,7 @@ import {
   passwordNeedsRehash,
   validatePassword,
   verifyPassword,
-} from "../src/lib/auth/passwords"
+} from "../src/lib/auth/passwords.ts"
 
 const scryptAsync = promisify(nodeScrypt)
 
@@ -90,8 +90,9 @@ test("validatePassword rejects all-identical characters", () => {
 test("validatePassword rejects email or local part", () => {
   assert.equal(validatePassword("player@example.com", "player@example.com"), "Password cannot be your email address.")
   assert.equal(validatePassword("PLAYER@EXAMPLE.COM", "player@example.com"), "Password cannot be your email address.")
-  assert.equal(validatePassword("player", "player@example.com"), "Password cannot be your email address.")
-  assert.equal(validatePassword("PLAYER", "player@example.com"), "Password cannot be your email address.")
+  assert.equal(validatePassword("playerplayer", "player@example.com"), "Password cannot be your email address.")
+  assert.equal(validatePassword("PLAYERPLAYER", "player@example.com"), "Password cannot be your email address.")
+  assert.equal(validatePassword("player@example", "player@example.com"), "Password cannot be your email address.")
 })
 
 test("validatePassword accepts a good passphrase", () => {
