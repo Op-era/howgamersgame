@@ -38,7 +38,7 @@ export async function POST(req: Request) {
   }
 
   await query(
-    "UPDATE users SET password_hash = $2, email_verified_at = COALESCE(email_verified_at, now()), reset_token_hash = NULL, reset_expires_at = NULL WHERE id = $1",
+    "UPDATE users SET password_hash = $2, email_verified_at = COALESCE(email_verified_at, now()), reset_token_hash = NULL, reset_expires_at = NULL, verification_token_hash = NULL, verification_expires_at = NULL WHERE id = $1",
     [row.id, await hashPassword(password)]
   )
 
