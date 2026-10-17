@@ -1,7 +1,8 @@
 import { query } from "@/lib/db/pg"
 import { createActionToken } from "@/lib/auth/passwords"
 import { sendPasswordResetEmail } from "@/lib/resend/client"
-import { NextResponse } from "next/server"
+import { handleResetRequest } from "@/lib/auth/resetFlow"
+import { NextResponse, after } from "next/server"
 
 /**
  * POST /api/auth/reset
@@ -13,7 +14,6 @@ import { NextResponse } from "next/server"
  * exists. Setting the new password also confirms the email, which is
  * how accounts from the email-only period get their first password.
  */
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const APP_URL = () => process.env.NEXT_PUBLIC_APP_URL || "https://howgamersgame.online"
 
 export async function POST(req: Request) {
@@ -24,28 +24,36 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 })
   }
 
-  const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : ""
-  if (!EMAIL_RE.test(email)) {
-    return NextResponse.json({ error: "Please enter a valid email address." }, { status: 400 })
-  }
+  const result = await handleResetRequest(
+    {
+      store: {
+        findByEmail: async (email: string) => {
+          const found = await query("SELECT id FROM users WHERE email = $1", [email])
+          return found.rows[0] as { id: string } | undefined
+        },
+        setResetToken: async (userId: string, resetTokenHash: string, resetExpires: Date) => {
+          await query("UPDATE users SET reset_token_hash = $2, reset_expires_at = $3 WHERE id = $1", [
+            userId,
+            resetTokenHash,
+            resetExpires,
+          ])
+        },
+      },
+      createToken: createActionToken,
+      sendEmail: sendPasswordResetEmail,
+      defer: (fn: () => Promise<void>) => {
+        after(async () => {
+          try {
+            await fn()
+          } catch (err) {
+            console.error("[reset] email failed", err instanceof Error ? err.name : "error")
+          }
+        })
+      },
+      appUrl: APP_URL(),
+    },
+    { email: body.email }
+  )
 
-  const found = await query("SELECT id FROM users WHERE email = $1", [email])
-  const row = found.rows[0] as { id: string } | undefined
-  if (!row) return NextResponse.json({ ok: true })
-
-  const token = createActionToken()
-  const expires = new Date(Date.now() + 60 * 60 * 1000)
-  await query("UPDATE users SET reset_token_hash = $2, reset_expires_at = $3 WHERE id = $1", [
-    row.id,
-    token.hash,
-    expires,
-  ])
-
-  try {
-    await sendPasswordResetEmail(email, `${APP_URL()}/auth/reset?token=${token.raw}`)
-  } catch (mailErr: any) {
-    return NextResponse.json({ error: "Email failed: " + mailErr.message }, { status: 500 })
-  }
-
-  return NextResponse.json({ ok: true })
+  return NextResponse.json(result.body, { status: result.status })
 }

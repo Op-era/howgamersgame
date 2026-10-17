@@ -8,6 +8,7 @@ import Navigation from "@/components/layout/Navigation"
 function ResetForm() {
   const searchParams = useSearchParams()
   const token = searchParams.get("token") || ""
+  const welcome = searchParams.get("welcome") === "1"
   const [password, setPassword] = useState("")
   const [confirm, setConfirm] = useState("")
   const [loading, setLoading] = useState(false)
@@ -21,8 +22,8 @@ function ResetForm() {
       setError("This reset link is invalid or has expired.")
       return
     }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters.")
+    if (password.length < 10) {
+      setError("Password must be at least 10 characters.")
       return
     }
     if (password !== confirm) {
@@ -90,10 +91,12 @@ function ResetForm() {
         }}
       >
         <h2 style={{ margin: "0 0 4px", fontSize: 18, color: "#fff", letterSpacing: "0.1em" }}>
-          SET NEW PASSWORD
+          {welcome ? "CHOOSE YOUR PASSWORD" : "SET NEW PASSWORD"}
         </h2>
         <p style={{ margin: "0 0 24px", fontSize: 12, color: "var(--text-muted)" }}>
-          Choose a new password for your account.
+          {welcome
+            ? "Confirm your email by choosing a password for your account."
+            : "Choose a new password for your account."}
         </p>
 
         {done ? (
@@ -128,7 +131,7 @@ function ResetForm() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                minLength={6}
+                minLength={10}
                 placeholder="••••••••"
                 style={inputStyle}
               />
@@ -140,7 +143,7 @@ function ResetForm() {
                 value={confirm}
                 onChange={(e) => setConfirm(e.target.value)}
                 required
-                minLength={6}
+                minLength={10}
                 placeholder="••••••••"
                 style={inputStyle}
               />
