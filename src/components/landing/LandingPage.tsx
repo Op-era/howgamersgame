@@ -26,7 +26,7 @@ export default function LandingPage() {
       setLoading(false)
       return
     }
-    if (password.length < 6) {
+    if (mode === 'login' && password.length < 6) {
       setError('Password must be at least 6 characters.')
       setLoading(false)
       return
@@ -37,13 +37,13 @@ export default function LandingPage() {
         const res = await fetch('/api/auth/signup', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, password, username: callsign || undefined }),
+          body: JSON.stringify({ email, username: callsign || undefined }),
         })
         const data = await res.json()
         if (!res.ok) {
           setError(data.error || 'Sign up failed. Please try again.')
         } else {
-          setNotice('Account created! Check your email to confirm, then log in.')
+          setNotice('Check your email: we sent a link to confirm your address and choose your password.')
           setMode('login')
           setPassword('')
         }
@@ -191,6 +191,7 @@ export default function LandingPage() {
               }}
             />
           </div>
+          {mode === 'login' && (
           <div>
             <label style={{ fontSize: 11, letterSpacing: '0.1em', color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>
               PASSWORD
@@ -213,6 +214,7 @@ export default function LandingPage() {
               }}
             />
           </div>
+          )}
           {mode === 'signup' && (
           <div>
             <label style={{ fontSize: 11, letterSpacing: '0.1em', color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>
