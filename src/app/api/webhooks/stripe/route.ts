@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
 import type { NextRequest } from 'next/server'
-import { getStripe } from '@/lib/stripe/client'
 import { query } from '@/lib/db/pg'
 import { sendCoinPurchaseEmail } from '@/lib/resend/client'
 import { handleStripeEvent } from '@/lib/coins/webhook'
+import { verifyStripeWebhookRequest } from '@/lib/stripe/verify-webhook'
 import type { CreditResult, StripeEventLike } from '@/lib/coins/webhook'
 
 export const runtime = 'nodejs'
@@ -22,18 +22,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Webhook not configured' }, { status: 503 })
   }
 
-  const body = await request.text()
-  const sig = request.headers.get('stripe-signature')
-  if (!sig) {
-    return NextResponse.json({ error: 'Missing signature' }, { status: 400 })
-  }
-
-  let event: StripeEventLike
-  try {
-    event = getStripe().webhooks.constructEvent(body, sig, secret) as unknown as StripeEventLike
-  } catch {
-    return NextResponse.json({ error: 'Invalid signature' }, { status: 400 })
-  }
+  const verified = await verifyStripeWebhookRequest(request, secret)
+  if (!verified.ok) return verified.response
+  const event = verified.event as unknown as StripeEventLike
 
   const outcome = await handleStripeEvent(event, {
     creditPurchase: async (eventId, eventType, p): Promise<CreditResult> => {
