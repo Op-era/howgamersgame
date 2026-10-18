@@ -1,6 +1,7 @@
 import { createHmac, timingSafeEqual } from 'crypto'
 import { cookies } from 'next/headers'
 import { query } from '@/lib/db/pg'
+import { grantStarterCoins } from '@/lib/coins/starter'
 
 /**
  * Minimal session for howgamersgame on Fly Postgres.
@@ -59,6 +60,7 @@ export async function ensureUser(email: string, displayName?: string): Promise<s
   )
   const id = (created.rows[0] as { id: string }).id
   await query('INSERT INTO profiles (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [id])
+  await grantStarterCoins(query, id)
   return id
 }
 

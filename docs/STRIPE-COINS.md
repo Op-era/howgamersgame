@@ -34,13 +34,15 @@ Set in the hosting environment (Fly secrets or equivalent). Never commit values.
 
 ## Database setup (Supabase SQL Editor)
 
-Run all three files **in this order**. All are safe to re-run. For a brand new database, `schema.sql` already contains them (regenerate with `python3 scripts/sync-schema.py` after editing a migration).
+Run all files **in this order** (the fourth and fifth, `f` and `g`, are NOT applied anywhere yet; they need Shane's go-ahead). All are safe to re-run. For a brand new database, `schema.sql` already contains them (regenerate with `python3 scripts/sync-schema.py` after editing a migration).
 
 1. `src/lib/supabase/migrations/2026-10-04-a-coin-purchase-ledger.sql`: `stripe_events`, `revenue_events` (append only, includes terms version and acceptance time), the `stripe_checkout_session_id` column, and `credit_coin_purchase()`.
 2. `src/lib/supabase/migrations/2026-10-04-b-wallet-protection.sql` (**required, not optional**): players can never change their own coins.
 3. `src/lib/supabase/migrations/2026-10-04-c-spend-award.sql`: atomic, idempotent `spend_coins()` and `award_coins()`, and the `idempotency_key` ledger column.
+4. `src/lib/supabase/migrations/2026-10-15-f-coin-lots.sql`: free promo coins versus paid coin lots, spend allocations, purchase deductions, and the rewritten `spend_coins()` / `award_coins()` / `credit_coin_purchase()`. See the lots section below.
+5. `src/lib/supabase/migrations/2026-10-16-g-promo-grants.sql`: per grant free coins (`promo_grants`) that expire 30 days after each grant, the append-only `promo_expirations` log, `expire_promo_coins()`, `grant_starter_coins()`, and paid-first `spend_coins()`. See the promo grants section below.
 
-**Run order warning:** deploy the code only after all three are applied. The new routes call functions that do not exist before the migrations, and `/store` needs `revenue_events`.
+**Run order warning:** deploy the code only after all of them are applied. The new routes call functions that do not exist before the migrations, and `/store` needs `revenue_events`.
 
 ### Wallet protection (file b): who can change what
 
@@ -61,7 +63,7 @@ Only the service role key (server routes), the SECURITY DEFINER functions, and t
 - **Who can call:** only a holder of a valid, active game API key. Admins create keys per game, and the key must stay on the game's server. Players have no key and cannot read or create one (see wallet protection). The SQL functions themselves are executable by `service_role` only.
 - **Idempotency:** send `Idempotency-Key: <unique per operation>` (or `idempotencyKey` in the body). The first call applies; a retry with the same key returns the original result with `"replayed": true` and changes nothing. Keys are scoped per game and per spend/award. The same key with a different user or amount returns `409`.
 - The key is **optional by default so existing games keep working**, but without one a retry is a new spend. Set `COINS_REQUIRE_IDEMPOTENCY_KEY=true` to make it mandatory once games send it.
-- Limits: award max 10,000 per call (also enforced in SQL), spend max 1,000,000 per call, whole numbers only.
+- Limits: award max 1,000 per call (also enforced in SQL; lowered from 10,000 on 2026-10-16), spend max 1,000,000 per call, whole numbers only.
 - Spends and awards are recorded in `coin_transactions` (type `spend` / `award`, with `game_id`), which is the wallet ledger. `revenue_events` stays purchase revenue only. Developer revenue share can be computed from `spend` rows by `game_id`.
 - Changed responses: `409` now means idempotency key conflict (it used to mean "concurrent update, retry", which can no longer happen).
 
@@ -106,21 +108,23 @@ Do **only** with Shane's go-ahead. Costs $5 plus Stripe's fee, refundable.
 8. Refund the payment in Stripe Dashboard (Payments > the $5 payment > Refund).
 9. **Refunds do not reverse coins automatically** (see below). Reverse the test account by hand:
    ```sql
-   begin;
-   update profiles set coin_balance = greatest(coin_balance - 550, 0), total_coins_purchased = greatest(total_coins_purchased - 550, 0) where id = '<TEST_USER_ID>';
-   insert into coin_transactions (user_id, type, amount, balance_after, description)
-     select id, 'refund', -550, coin_balance, 'Manual reversal of live test purchase' from profiles where id = '<TEST_USER_ID>';
-   insert into revenue_events (event_type, user_id, package_id, gross_cents, currency, coins_credited, bonus_coins, stripe_event_id, stripe_checkout_session_id)
-     values ('refund', '<TEST_USER_ID>', 'player', 500, 'usd', -550, -50, 'manual_refund_<ANY_UNIQUE_STRING>', '<cs_live_... of the test>');
-   commit;
+   -- Needs migration 2026-10-15-f-coin-lots.sql. Never edit profiles.coin_balance by hand: it must equal
+   -- promo_balance + the coins left in the user's lots, and record_purchase_deduction keeps that true.
+   -- 1. Find the purchase (revenue event id) of the test charge:
+   select id, user_id, gross_cents, coins_credited from revenue_events
+    where stripe_checkout_session_id = '<cs_live_... of the test>' and event_type = 'coin_purchase';
+   -- 2. Record the refund and take back the unspent coins (service role only; safe to run twice with the same ref):
+   select record_purchase_deduction('<REVENUE_EVENT_ID>', 'refund', 500, 'manual_refund_<ANY_UNIQUE_STRING>', 550, 'Manual reversal of live test purchase');
+   -- 3. Check the wallet still adds up (expect zero rows):
+   select * from wallet_consistency_report();
    ```
    Only for the test account; if the balance was already spent, decide separately.
 
 ## Known gaps and follow-ups (not done here)
 
 - **Refunds and chargebacks** do not claw back coins or write ledger rows, by decision (see the terms section). `revenue_events` allows `refund` / `chargeback` types for later. Watch the Stripe Dashboard for disputes; a lost dispute costs money plus a fee.
-- Spent and awarded coins are not tracked as "paid" versus "free" lots. ROADMAP's developer payout model (paid value of the coin lot) needs that before payouts exist.
-- Games can award up to 10,000 coins per call with no daily cap per game or per player. Consider caps before opening the API to outside developers.
+- Paid and free coins are now tracked as lots (see the lots section below), but the Stripe webhook does not yet call record_purchase_deduction, so taxes, processing fees, refunds and chargebacks are not recorded automatically; until it is wired, developer earnings are overstated by those amounts. Spends made before the lots migration have no allocations, so their developer earnings cannot be computed from lots.
+- Games can award up to 1,000 coins per call with no daily cap per game or per player (the award API is disabled by policy anyway). Consider caps before opening the API to outside developers.
 - `verifyGameApiKey` accepts keys of games that are marked inactive.
 - Other emails (`sendConfirmationEmail`, password reset) still interpolate `displayName` into HTML without escaping.
 - Connect/payouts, subscriptions, and ad-watch rewards are intentionally not touched. Terms section 5 still describes subscriptions that do not exist yet.
@@ -137,10 +141,31 @@ Wording lives on `/terms` section 4 ("Coin economy and coin purchases") and in `
 
 Refund reversal is **not implemented** (by decision): the app never takes coins back after a refund or chargeback, and no `refund` / `chargeback` rows are written. If you refund someone in the Stripe Dashboard anyway, only the test account steps above remove coins.
 
+## Coin lots and spend allocation (migration 2026-10-15-f-coin-lots.sql)
+
+- **Free promo coins** are held in `profiles.promo_balance` and are worth nothing to developers. **Paid coins** live in `coin_lots`: one lot per purchase, linked to its `revenue_events` row. A lot's coins include bonus coins, so each paid coin is worth the price paid divided by the coins received (for example 500 cents for 550 coins).
+- Invariant: `coin_balance = promo_balance + sum(coin_lots.coins_remaining)`. `wallet_consistency_report()` lists any user where this is false.
+- `spend_coins()` takes paid coins first (oldest purchase first, bonus coins included), then free promo grants, soonest-expiring first (order changed 2026-10-16, migration g; expired grants are never spent, even before the nightly sweep). It locks the wallet row and the lots (`FOR UPDATE`), so concurrent spends cannot overspend, and records each lot it used in `coin_spend_allocations` (coins, value in cents). Values are whole cents, split with a cumulative floor so rounding never drifts.
+- `award_coins()` adds promo coins only: one `promo_grants` row per award, capped at 1,000 coins per call. `/api/coins/award` currently returns 403 by policy, so promo coins exist only if awards are re-enabled or from the backfill.
+- `record_purchase_deduction(revenue_event_id, kind, amount_cents, external_ref, void_coins, note)` records a tax, processing fee, refund or chargeback against a purchase (kind is `tax`, `processing_fee`, `refund` or `chargeback`; the same kind and external_ref twice is ignored). For a refund or chargeback, `void_coins` removes that many unspent coins from the lot and from the balance. It is service role only and nothing calls it yet.
+- `developer_earnings(game_id, from, to, share_bps)` reports, per game, the paid coins spent, their gross value, the net value (gross minus deductions on the purchases they came from) and the developer share (65% of net by default). Promo coins pay nothing.
+- The migration's backfill converts each existing balance: coins matching a purchase become lot coins (newest purchases hold what is left), anything else becomes promo. Rollback: restore `credit_coin_purchase`, `spend_coins`, `award_coins` and `protect_wallet_columns` from migrations a, b and c, then drop the new tables; `coin_balance` is never changed by the migration.
+
+## Promo grants, expiry and starter coins (migration 2026-10-16-g-promo-grants.sql)
+
+- **Paid coins never expire.** `coin_lots` has no expiry column; bonus coins are part of the lot and never expire either.
+- **Free promo coins expire 30 days after each grant**, including the starter grant. Each grant is a row in `promo_grants` (`coins_granted`, `coins_remaining`, `granted_at`, `expires_at`, `source` of `award`, `starter` or `grandfather`). 30 days is stored as exactly 720 hours so daylight saving never changes it. `profiles.promo_balance` stays as the derived total of the grants not yet swept, so the invariant is still `coin_balance = promo_balance + sum(coin_lots.coins_remaining)`.
+- **Spend order: paid lots first** (oldest purchase first), **then promo grants, soonest-expiring first.** `coin_spend_allocations` rows for promo coins carry `promo_grant_id`. Promo allocations are always worth 0 cents to developers.
+- **Nightly sweep:** `expire_promo_coins(now)` locks the profile row, then its expired grants, zeroes them, writes one `promo_expirations` row per grant (append-only) and lowers `promo_balance` and `coin_balance`. It is idempotent. Vercel Cron calls `GET /api/cron/expire-promo` at 10:15 UTC every day (`vercel.json`); the route needs the `CRON_SECRET` environment variable in Vercel and answers 503 without it, 401 for a wrong secret. Until a sweep runs, expired coins still show in `coin_balance` but cannot be spent.
+- **Starter grant:** every NEW account gets 150 promo coins (3 power ups at 50 coins each; the price is hard coded in `public/games/snake/index.html` and mirrored in `src/lib/coins/starter.ts`), once per account (`profiles.starter_granted_at`), through `grant_starter_coins()` which uses the same `create_promo_grant()` path as `award_coins()`. `ensureUser()` calls it only when it creates a new user; existing accounts get nothing. Note the older policy line "coins only enter via Stripe purchases" now has this one exception.
+- **Grandfather rule:** when migration g runs, each existing `promo_balance` becomes one grant that expires 30 days after the migration run.
+- **Earnings example** (tested in `tests/lots.test.ts`): 100 paid coins bought for $2.00 and 30 promo coins, spend 50. Old promo-first order: 30 promo + 20 paid, paid value 40 cents, developer share 26 cents. New paid-first order: 50 paid, paid value 100 cents, developer share 65 cents.
+- Rollback of g: drop `promo_expirations` and `promo_grants`, drop `coin_spend_allocations.promo_grant_id` and `profiles.starter_granted_at`, and restore `spend_coins`, `award_coins` and `wallet_consistency_report` from migration f. `coin_balance` is untouched.
+
 ## Tests
 
 ```sh
-npm test    # node --test "tests/**/*.test.ts": 28 tests, no network, no keys needed
+npm test    # node --test "tests/**/*.test.ts": 51 tests, no network, no keys needed (includes lots allocation, promo grants, starter grant and cron auth tests)
 ```
 
 Covers pack/price table, session validation, duplicate/concurrent delivery against an in memory model of the SQL function, failure then retry, real Stripe signature verification with a fake secret, HTML escaping, history payload, spend/award request parsing and result mapping, and the terms rules (acceptance, stale version, server stamped time, wording has no dashes, route and store page enforce it).
@@ -150,13 +175,20 @@ SQL, against a **scratch** Postgres only (never production). One command builds 
 ```sh
 export PSQL_BASE="psql -h /tmp -p 54329 -U postgres"
 sh tests/sql/setup-scratch.sh scratch
-for f in coin-purchase wallet-protection spend-award; do $PSQL_BASE -d scratch -q -v ON_ERROR_STOP=1 -f tests/sql/$f.sql; done
+for f in coin-purchase wallet-protection spend-award coin-lots promo-grants; do $PSQL_BASE -d scratch -q -v ON_ERROR_STOP=1 -f tests/sql/$f.sql; done
 PSQL="$PSQL_BASE -d scratch" sh tests/sql/concurrency.sh
 PSQL="$PSQL_BASE -d scratch" sh tests/sql/spend-award-concurrency.sh
+PSQL="$PSQL_BASE -d scratch" sh tests/sql/coin-lots-concurrency.sh
+bash tests/sql/coin-lots-backfill.sh lots_bf; bash tests/sql/promo-grants-backfill.sh promo_bf
 ```
 
 - `wallet-protection.sql`: as `anon` and `authenticated` (real `SET ROLE`), every direct write to `coin_balance`, `total_coins_purchased`, profile inserts and upserts (`INSERT .. ON CONFLICT DO UPDATE`), other players' rows, `coin_transactions`, `revenue_events`, `stripe_events`, `game_api_keys`, `coin_packages` and `games` is refused; reading key hashes and revenue is refused; display name edits and reading your own balance still work; the service role still works; and with privileges deliberately re-granted, the trigger alone still blocks the balance change.
 - `spend-award.sql`: ledger rows, replay, key conflicts, insufficient funds, caps, validation, `anon` / `authenticated` cannot call the functions.
 - `spend-award-concurrency.sh`: 25 parallel spends against a balance of 100 (exactly 3 apply, balance 10, never negative), 12 parallel retries with one key (applied once), 12 parallel award retries (applied once), 40 mixed parallel operations (balance equals the ledger), purchases and spends in parallel.
+
+- `coin-lots.sql`: lot creation, paid-first allocation values, per spend allocations, deductions, wallet consistency report, atomic rollback.
+- `promo-grants.sql`: award creates a grant (cap 1,000), starter grant once per account (150), paid-first then soonest-expiring, expired grants never spent, idempotent sweep, append-only `promo_expirations`, access control, no expiry column on `coin_lots`.
+- `coin-lots-concurrency.sh`: 100 parallel spends with paid-first order, duplicate deductions, spends racing voids.
+- `promo-grants-backfill.sh`: applies migrations a to f on legacy data, then g twice; checks grandfather grants, unchanged balances, idempotence and post-migration spends.
 
 The scratch DB needs the stand-ins in `tests/sql/supabase-stub.sql` for `auth.users`, `auth.uid()`, `auth.role()` and the three Supabase roles.
